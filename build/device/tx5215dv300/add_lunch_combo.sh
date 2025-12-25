@@ -1,0 +1,5 @@
+#!/bin/bash
+
+add_lunch_combo 325.tsingmicro_tx5215dv300_evb132_v1p1_debug_32
+add_lunch_combo 329.tsingmicro_tx5215dv300_evb132_v1p1-lcd_debug_32
+add_lunch_combo 343.tsingmicro_tx5215dv300_aiospinand_v2p0_debug_32
