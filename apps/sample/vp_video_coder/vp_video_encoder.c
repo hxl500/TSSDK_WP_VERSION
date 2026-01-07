@@ -281,7 +281,7 @@ static int vp_video_jpeg_create(vp_channel_config_t *channel, int chnNum) {
         return -1;
     }
 
-    ret = SAMPLE_COMM_VENC_Creat(enc_chnNum, payload, enSize, enRcMode, 0, 1, &stGopAttr);
+    ret = (enc_chnNum, payload, enSize, enRcMode, 0, 1, &stGopAttr);
     if (ret) {
         vp_error("venc start chn_%d error:0x%x", enc_chnNum, ret);
         return -1;
@@ -1197,6 +1197,15 @@ int vp_video_encoder_init(int format)
         vp_error("SAMPLE_COMM_CPM_Start failed for %#x!\n", ret);
         goto EXIT_CPM_UNBIND_STOP;
     }
+
+
+    // /*start cpm*/
+    // int s32Ret = SAMPLE_ALG_CPM_Config(CPMGrp, 2, 640, 360, peAlgType, 2, &stAlgChnSize);
+    // if (TS_SUCCESS != s32Ret)
+    // {
+    //     SAMPLE_PRT("SAMPLE_ALGO_CPM_Config failed for %#x!\n", s32Ret);
+    //     goto EXIT_CPM_UNBIND_STOP;
+    // }
 
     ret = SAMPLE_COMM_VPSS_Bind_CPM(0, 0, CPMGrp, 0);
     if (ret) {

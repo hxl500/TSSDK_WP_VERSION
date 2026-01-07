@@ -29,7 +29,7 @@
 
 #define USE_CPM  1  // not run proc cpm_process
 
-
+#define QI_LOG  1
 /*******************************************************
  * *
  * *    alg instance init table
@@ -319,6 +319,18 @@ exit:
 
 }
 
+unsigned long long getSystemTime()
+{
+	//struct timeval tv1;
+	//gettimeofday(&tv1, NULL);
+	//return (unsigned long long)(tv1.tv_sec * 1000LL) + (tv1.tv_usec / 1000);
+	unsigned long long int pts = 0;
+	struct timeval tv1;
+	gettimeofday(&tv1, NULL);
+	pts = (unsigned long long int)tv1.tv_sec * 1000 + (tv1.tv_usec / 1000);
+	return (long)pts;
+}
+
 #if USE_CPM
 static TS_S32  SAMPLE_ALG_Result_Proc(TS_U8 *YuvBuf,  SAMPLE_ALG_RESULT_S* pstAlgResult)
 {
@@ -343,7 +355,79 @@ static TS_S32  SAMPLE_ALG_Result_Proc(TS_U8 *YuvBuf,  SAMPLE_ALG_RESULT_S* pstAl
 }
 #endif
 
+int save_algo_yuv(void *yuv_data, int cnt)
+{
+	int height = 640; //640;
+	int width = 360; //360;
+	FILE *pFile = NULL;
+	char *dir_path = "/mnt/sda0/weipai";
+	char filepath[200] = {
+		0,
+	};
+	snprintf(filepath, sizeof(filepath) - 1, "%s/%d.img", dir_path, cnt);
+	printf("***filepath***:%s\n", filepath);
+	if ((pFile = fopen(filepath, "wb")) == NULL) {
+		ALG_LOGD(" fopen %s failed !. \n", filepath);
+		return TS_FAILURE;
+	}
 
+	if (NULL != yuv_data) {
+		size_t bytesToWrite = width * height * 3 / 2; // YUV420 格式下，总字节数为图像宽高的 1.5 �?
+		size_t bytesWritten = fwrite(yuv_data, 1, bytesToWrite, pFile);
+		if (bytesWritten != bytesToWrite) {
+			fprintf(stderr, "Failed to write all YUV data to file !.\n");
+		}
+	}
+
+	// 释放资源
+	fclose(pFile);
+	pFile = NULL;
+
+	ALG_LOGD(" szInfo: %s done \n", filepath);
+
+	return TS_SUCCESS;
+}
+
+TS_S32 split_vpss_stitch_yuv420(TS_S32 chn_num,TS_S32 chn, TS_VOID *yuv_image, TS_U32 image_width, TS_U32 image_height,
+				TS_VOID *out_buf);
+TS_S32 split_vpss_stitch_yuv420(TS_S32 chn_num,TS_S32 chn, TS_VOID *yuv_image, TS_U32 image_width, TS_U32 image_height,
+				TS_VOID *out_buf)
+{
+	if (NULL == yuv_image || NULL == out_buf) {
+		SAMPLE_PRT("param buffer is null\n", chn);
+		return -1;
+	}
+
+	if (0 == chn) {
+		memcpy(out_buf, yuv_image, image_width * image_height);
+#if defined(DBG_JCY_YHJC)
+		memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height),
+		       image_width * image_height / 2);
+#else
+		if (2 == chn_num) {
+			memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height) * 2,
+			       image_width * image_height / 2);
+		} else {
+			memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height),
+			       image_width * image_height / 2);
+		}
+
+#endif
+	} else if (1 == chn) {
+		memcpy(out_buf, yuv_image + image_width * image_height, image_width * image_height);
+		memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height) * 5 / 2,
+		       image_width * image_height / 2);
+        if (2 == chn_num)
+        {
+            memcpy(out_buf+image_width * image_height*3/2, yuv_image + image_width * image_height*3, image_width * image_height*3/2);
+            //memcpy(out_buf+image_width * image_height*5/2, yuv_image + image_width * image_height*3, image_width * image_height*3/2);
+        }
+	} else {
+		SAMPLE_PRT("chn out of range:%d\n", chn);
+		return -2;
+	}
+	return 0;
+}
 //cpm process thread
 static TS_VOID* SAMPLE_CPM_ALG_Process(void* p)
 {
@@ -373,7 +457,7 @@ static TS_VOID* SAMPLE_CPM_ALG_Process(void* p)
 
     TS_U8 *YuvImage = NULL;
 	TS_U8 *YuvBigImage = NULL;
-    TS_S32 algo_yuv_size = alg_chn_w * alg_chn_h * 3 / 2;
+    TS_S32 algo_yuv_size = alg_chn_w * alg_chn_h * 3/2;//alg_chn_w * alg_chn_h * 3 / 2; 拼接双目
 
     s32Ret = TS_MPI_SYS_MmzAlloc_Cached(&(AlgoFaceIn.pDataPhy), &(AlgoFaceIn.pData), NULL, NULL, alg_rgb_size);
 	if(0 != s32Ret) {
@@ -401,16 +485,19 @@ static TS_VOID* SAMPLE_CPM_ALG_Process(void* p)
 		fread((TS_U8 *)RgbImage, 1, 640 * 3 * 384, pfInput);
 		SAMPLE_PRT("xxn_xxn file read read read!\n");
 	}*/
-
+    long t0 ,t1;
     prctl(PR_SET_NAME, (unsigned long)"tsalg_proc_thread", 0, 0, 0);
     SAMPLE_PRT("SAMPLE_COMM_ALG_FACE_Process run[%d]\n", s32Ret);
     while (pCpmParam->bAlgProcRunFlag) {
         if (pCpmParam->enAlgProcBufStatus != BUFFER_STATUS_ALG_PROCESS){
             goto algo_next_loop1;
         }
-
+        #if QI_LOG
+        t0 = getSystemTime();
+        printf("=======================t0===============================%llu\n",t0);
+        #endif
         /*3.yuv to rgb  */
-        Frame_count++;
+        
         //if(Frame_count % ALG_SKIP_INTERVAL == 0)
         //{
         //    goto algo_next_loop;
@@ -418,7 +505,9 @@ static TS_VOID* SAMPLE_CPM_ALG_Process(void* p)
 
         //sprintf(yuvFile, "./%d_w%d_h%d.yuv", Frame_count, ALG_DETECT_IMAGE_W, ALG_DETECT_IMAGE_H);
         //SaveYuvImage((const TS_CHAR *)yuvFile, pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0], ALG_DETECT_IMAGE_W, ALG_DETECT_IMAGE_H);
-
+        //save_algo_yuv(pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0], Frame_count);
+        Frame_count++;
+			//save_cnt++;
 #if 0
 
         if(Frame_count%4 ==0){
@@ -515,7 +604,13 @@ static TS_VOID* SAMPLE_CPM_ALG_Process(void* p)
         pthread_mutex_unlock(&(pCpmParam->stAlgProcLock));
 
         pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_FILL;
+        #if QI_LOG
+        t1 = getSystemTime();
+        printf("=======================t1===============================%llu\n",t1);
+        printf("=======================t1-t0===============================%d\n",t1-t0);
+        #endif
         continue;
+
 
 algo_next_loop1:
         usleep(1000 * 25);
@@ -545,6 +640,7 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle)
 
 	gstSampleVideoAlgCpm.u32ActualAlgNum = SAMPLE_ALG_Init_Instances(pCpmParam->pstAlgInstList, pCpmParam->enAlgMask, pCpmParam->u32AlgNum);
 
+    printf("实际支持算法数量gstSampleVideoAlgCpm.u32ActualAlgNum:%d\n",gstSampleVideoAlgCpm.u32ActualAlgNum);
     if (0 == gstSampleVideoAlgCpm.u32ActualAlgNum){
         ALG_LOGE("no one alg register\n");
         //return TS_FAILURE;
@@ -607,6 +703,8 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **
 	static int count = 0;
     static int default_cnt = 0;
 
+
+    
     switch (pCpmParam->enAlgProcBufStatus)
     {
         case BUFFER_STATUS_INIT:
@@ -668,6 +766,8 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **
 #endif
 
     memcpy(out[0], in[0], sizeof(VIDEO_FRAME_INFO_S));
+    //memcpy(out[0], in[0], sizeof(VIDEO_FRAME_INFO_S));
+	//memcpy(out[1], in[0], sizeof(VIDEO_FRAME_INFO_S));//hxl
     VIDEO_FRAME_INFO_S *bufinfo = (VIDEO_FRAME_INFO_S *)in[0];
 #if SDK_VERSON_030
 #else

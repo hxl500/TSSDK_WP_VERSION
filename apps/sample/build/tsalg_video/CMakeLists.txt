@@ -38,12 +38,12 @@ link_directories(
 	        ${SAMPLE_ALG_VIDEO_DIR}
 		)
 
-set(ALGO_LIB 
-	trp
-	algmotiondetect
-	algpcppdetect
-	cat_detect_lib
-)
+# set(ALGO_LIB 
+# 	trp
+# 	algmotiondetect
+# 	algpcppdetect
+# 	cat_detect_lib
+# )
 
 if(TARGET_CHIPSERIES STREQUAL "TX5368AX" OR TARGET_CHIPSERIES STREQUAL "TX5339AX")
 	add_executable(${SAMPLE_APP_ALG_VIDEO}
@@ -110,12 +110,16 @@ endif()
 TARGET_LINK_LIBRARIES(${SAMPLE_APP_ALG_VIDEO} -Wl,--start-group dl pthread stdc++ 
 	# librtsp_server_gb.a 
 	${MPI_BASE_LIB}
-	algcommon
-	algutil_cv
+	libalgcommon.a
+	libalgutil_cv.a
 	#libplat_rne_linux_a53.a libchip_sdk.a 
-	rne_rt_g3
-	rne_pal_linux
-	rne_common
+	librne_rt_g3.a
+	librne_pal_linux.a
+	librne_common.a
 	${ALGO_LIB}
+		libtrp.a
+	libalgmotiondetect.a
+	libalgpcppdetect.a
+	libcat_detect_lib.a
 	-Wl,--end-group
 )

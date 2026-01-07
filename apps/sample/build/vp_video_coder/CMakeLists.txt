@@ -6,9 +6,17 @@ add_definitions(-DSENSOR0_TYPE=EVB_SENSOR)
 
 set(VP_VIDEO_CODER_TEST vp_video_coder_test)
 
+# set(ALGO_LIB 
+# 	trp
+# 	algmotiondetect
+# 	algpcppdetect
+# 	cat_detect_lib
+# )
+
 include_directories(
     ${VP_VIDEO_CODER_DIR}
     ${VP_VIDEO_CODER_DIR}/vp_osd
+    ${VP_VIDEO_CODER_DIR}/qi_alg
     ${VP_COMM_DIR}/inc/vp_tools
     ${VP_COMM_DIR}/inc/vp_printf
     ${VP_COMM_DIR}/inc/vp_events
@@ -50,6 +58,9 @@ add_executable(
     ${VP_VIDEO_CODER_DIR}/vp_osd/vp_font_64.c
     ${VP_VIDEO_CODER_DIR}/vp_osd/vp_font_80.c
     ${VP_VIDEO_CODER_DIR}/vp_osd/vp_font.c
+    ${VP_VIDEO_CODER_DIR}/qi_alg/sample_alg_cpm.c
+    ${VP_VIDEO_CODER_DIR}/qi_alg/video_alg_catdetect.c
+    # ${VP_VIDEO_CODER_DIR}/vp_isp_ts.c
 )
 
 TARGET_LINK_LIBRARIES(${VP_VIDEO_CODER_TEST} -Wl,--start-group dl pthread stdc++ 
@@ -58,4 +69,11 @@ TARGET_LINK_LIBRARIES(${VP_VIDEO_CODER_TEST} -Wl,--start-group dl pthread stdc++
     libvp_tools.a
     libvp_observers.a
     libtrp.a 
+    libcat_detect_lib.a
+     libalgcommon.a
+     libalgutil_cv.a
+	#libplat_rne_linux_a53.a libchip_sdk.a 
+	 librne_rt_g3.a
+	 librne_pal_linux.a
+	 librne_common.a
     ${MPI_BASE_LIB} -Wl,--end-group)

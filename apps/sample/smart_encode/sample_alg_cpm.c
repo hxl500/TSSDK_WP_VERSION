@@ -232,7 +232,7 @@ TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U3
     memset(&stCPMGrpAttr, 0, sizeof(CPM_GRP_ATTR_S));
     stCPMGrpAttr.u32GrpId        =  0;
     stCPMGrpAttr.u32PipeNum      =  pipeNum;
-    stCPMGrpAttr.u32ChnNum       =  1;
+    stCPMGrpAttr.u32ChnNum       =  1;//1;
     stCPMGrpAttr.u32Interval     =  1;
     stCPMGrpAttr.bSyncPipe		 = TS_FALSE;
     stCPMGrpAttr.stChnAttr[0].u32Width = u32Width;
@@ -271,8 +271,8 @@ TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U3
         /*algo channel*/
         if(i == 1)
         {
-            stCPMHandle.stPipeAttr[1].u32Width = pstAlgChnSize->width;  //640;
-            stCPMHandle.stPipeAttr[1].u32Height = pstAlgChnSize->hight; //360;
+            stCPMHandle.stPipeAttr[1].u32Width = 640;//pstAlgChnSize->width;  //640;
+            stCPMHandle.stPipeAttr[1].u32Height = 360;//pstAlgChnSize->hight; //360;
             stCPMHandle.stPipeAttr[1].enPixelFormat = PIXEL_FORMAT_NV_12;
 			//stCPMHandle.stPipeAttr[i].enPixelFormat = PIXEL_FORMAT_ARGB_8888;
         }

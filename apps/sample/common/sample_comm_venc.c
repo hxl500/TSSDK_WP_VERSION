@@ -301,6 +301,49 @@ TS_S32 SAMPLE_COMM_VENC_Creat(VENC_CHN VencChn, PAYLOAD_TYPE_E enType,  PIC_SIZE
     SAMPLE_COMM_SYS_GetPicSize(enSize, &stPicSize);
 	u32Gop = u32FrameRate * 3;  // 5->3
 	SAMPLE_PRT("********************u32FrameRate=%d, GOP = %d\n",u32FrameRate, u32Gop);
+    SAMPLE_PRT("********************stPicSize.u32Width=%d, stPicSize.u32Height = %d\n",stPicSize.u32Width, stPicSize.u32Height);
+    if(VencChn == 0)
+    {
+		stPicSize.u32Width = 1920;
+		// if(b_double)
+		//    stPicSize.u32Height = 1080*2;
+		// else
+		    stPicSize.u32Height = 1080;
+	}
+	else if(VencChn == 1)
+	{
+		stPicSize.u32Width = 640;
+		// if(b_double)
+		//    stPicSize.u32Height = 360*2;
+		// else
+		    stPicSize.u32Height = 360;
+	}
+	// else if(VencChn == 2)
+	// {
+	// 	if(b_double)
+	// 	{
+    //        stPicSize.u32Width  = 16;
+	// 	   stPicSize.u32Height = 16;
+	// 	}
+	// 	else
+	// 	{
+    //         stPicSize.u32Width  = 1920;
+	// 	    stPicSize.u32Height = 1080;
+	// 	}
+	// }
+	else
+	{
+        //if(b_double)
+		// {
+        //    stPicSize.u32Width  = 16;
+		//    stPicSize.u32Height = 16;
+		// }
+		// else
+		// {
+            stPicSize.u32Width  = 640;
+		    stPicSize.u32Height = 360;
+		//}
+	}
     /******************************************
      step 1:  Create Venc Channel
     ******************************************/
@@ -3900,7 +3943,7 @@ TS_VOID* SAMPLE_COMM_VENC_GetVencStreamProcV2(TS_VOID* p)
         }
 
         TimeoutVal.tv_sec  = 0;
-        TimeoutVal.tv_usec = 4000 * 1000;//15fps, 66.7ms per frame
+        TimeoutVal.tv_usec = 42*1000;//4000 * 1000;//15fps, 66.7ms per frame
 
         s32Ret = TS_MPI_VENC_SELECT(maxfd + 1, &read_fds, NULL, NULL, &TimeoutVal);
         if (s32Ret < 0)

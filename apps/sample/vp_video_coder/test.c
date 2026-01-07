@@ -21,6 +21,8 @@ extern "C" {
 
 #include "vp_video_soft_pho_sens.h"
 
+#include "vp_isp.h"
+
 #define RTSP 1
 
 volatile sig_atomic_t running = 1;
@@ -163,11 +165,36 @@ uint8_t jpeg_data[1024*100];
 int main(int argc, char *argv[])
 {
 	int ret = 0;
-
+    int alg_id = 0;
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
     vp_video_encoder_init(0);
+
+
+    // // 初始化算法管理器
+    // ret = sample_alg_cpm_init();
+    // if(ret != 0)
+    // {
+    //     printf("sample_alg_cpm_init failed\n");
+    //     return -1;
+    // }
+
+    // // 注册猫检测算法
+    // ret = sample_alg_cpm_register(alg_id, "cat_detect", video_alg_catdetect_create, video_alg_catdetect_destroy);
+    // if(ret != 0)
+    // {
+    //     printf("sample_alg_cpm_register failed\n");
+    //     return -1;
+    // }
+
+    // // 启动算法
+    // ret = sample_alg_cpm_start(alg_id);
+    // if(ret != 0)
+    // {
+    //     printf("sample_alg_cpm_start failed\n");
+    //     return -1;
+    // }
 
     #if VP_SENSOR_NUM > 0
     vp_video_encoder_start(0, 0);
@@ -181,6 +208,8 @@ int main(int argc, char *argv[])
     vp_video_encoder_start(2, 0);
     vp_video_encoder_start(2, 1);
     #endif
+
+    //vp_isp_set_mirr_flip(0,1,0);
 #if 0
     pthread_t ph;
     pthread_create(&ph, NULL, video_thread_func, (void *) 0);
@@ -190,6 +219,7 @@ int main(int argc, char *argv[])
     pthread_create(&ph, NULL, video_thread_func, (void *) 4);
     pthread_create(&ph, NULL, video_thread_func, (void *) 5);
 #endif
+printf("====(VP_SENSOR_NUM << 2)=====:%d\n",VP_SENSOR_NUM << 2);
 #if 1
     VENC_CHN        VencChn[6] = {0,1,2,3,4,5};
     SAMPLE_COMM_VENC_StartGetStreamV2(VencChn, (VP_SENSOR_NUM << 1), SAMPLE_VENC_RTSP);

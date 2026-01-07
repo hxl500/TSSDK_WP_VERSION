@@ -17,6 +17,8 @@ char *g_pcModelRoot = TS_NULL;
 
 static TS_U32 g_sample_algo_terminal_all = 0;
 
+static TS_S32 grp_num = 2; //2;hxl 双目标识
+
 static ts_void fastboot_insmod(){
 	system("insmod /usr/lib/modules/ts_codec.ko");
 	system("insmod /usr/lib/modules/hx280enc.ko");
@@ -210,7 +212,25 @@ static TS_S32 SAMPLE_ALG_GetSizeBySensor(SAMPLE_SNS_TYPE_E enMode, PIC_SIZE_E* p
 
     return s32Ret;
 }
-
+TS_S32 i2c_detect()
+{
+    TS_S32 ret = 1;
+    FILE* fp = popen("i2cget -y -f 0 0x30 0x0 b", "r");
+    if (!fp)
+    {
+        printf("popen fail: ");
+    }
+    
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), fp) != NULL)
+    {
+        printf("%s", buf);
+    }
+    if(strstr(buf,"0x00") != NULL)
+	    ret = 2;
+    pclose(fp);
+    return ret;
+}
 TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_E* peAlgType, TS_U32 u32AlgNum, SAMPLE_VIDEO_CHN_MODE eChnMode)
 {
     TS_S32             s32Ret = TS_SUCCESS;
@@ -242,12 +262,13 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
 
     CPM_GRP         CPMGrp = 0;
     TS_S32          u32CpmPipeNUm = 2;//1, 2;
-    TS_S32          s32ChnNum     = 1;
+    TS_S32          s32ChnNum     = 1;//1;//1; hxl
 	//TS_S32          s32VpssOutNum  = 2;
 	//CPM_GRP_ATTR_S stCpmGrpAttr = {0};
 	//CPM_Handle_S stCPMHandle = {0};
 
-    VENC_CHN        VencChn[2]    = {0,1};
+    VENC_CHN        VencChn[2]    = {0,1}; //hxl
+	//VENC_CHN        VencChn[5]    = {0,1,2,3,4};
     TS_U32          u32Profile[2] = {0,2};
     PAYLOAD_TYPE_E  enPayLoad[2]  = {PT_H265, PT_H264};
     VENC_GOP_MODE_E enGopMode;
@@ -284,7 +305,7 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
 #if 1
 	pstPipeInfo->enBitWid       = DATA_BITWIDTH_8;
 	pstPipeInfo->enBayer        = BAYER_GRBG;
-	pstPipeInfo->frameRate = 15 ;
+	pstPipeInfo->frameRate = 20 ;
 	pstPipeInfo->enWdrMode	= TS_FALSE;
 	pstPipeInfo->bIspByFly = TS_FALSE;
 #else
@@ -336,6 +357,12 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
 	pstChnInfo->width[0] = stSize.u32Width;
 	pstChnInfo->height[0] = stSize.u32Height;
 
+    // pstChnInfo->ViChn[1]        = 1;
+	// pstChnInfo->validChnlNum = s32ChnNum;
+    // pstChnInfo->enPixFormat     = PIXEL_FORMAT_NV_12;
+	// pstChnInfo->width[1] = 640;
+	// pstChnInfo->height[1] = 360;
+
     /*config vb*/
     memset(&stVbConf, 0, sizeof(VB_CONFIG_S));
     stVbConf.u32MaxPoolCnt              = 1;
@@ -346,8 +373,8 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
     stVbConf.astCommPool[0].u32BlkCnt   = 1;
 
     u32BlkSize = VI_GetRawBufferSize(stSize.u32Width, stSize.u32Height, PIXEL_FORMAT_RGB_BAYER_16BPP, COMPRESS_MODE_NONE, DEFAULT_ALIGN);
-    stVbConf.astCommPool[1].u64BlkSize  = 1*1024*1024;//u32BlkSize;
-    stVbConf.astCommPool[1].u32BlkCnt   = 1;
+    stVbConf.astCommPool[1].u64BlkSize  = 10*1024*1024;//u32BlkSize;
+    stVbConf.astCommPool[1].u32BlkCnt   = 10;
 
     s32Ret = SAMPLE_COMM_SYS_Init(&stVbConf);
     if (TS_SUCCESS != s32Ret)
@@ -380,6 +407,8 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
     }
 
     SAMPLE_PRT("####### SAMPLE_COMM_VI_StartVi success!\n");
+
+	grp_num = i2c_detect();//hxl
 #if SDK_VERSON_030
 #else
 	s32Ret = TS_MPI_ISP_SetLtm(ViPipe, 0);//enable LTM
@@ -403,6 +432,16 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
     stVpssGrpAttr.u32MaxH                               = stSize.u32Height;
 
 	VpssChn	   = 0;
+    //if (VpssChn == 0) {
+		//stSize.u32Width = 1920;
+		//stSize.u32Height = 1080;
+		//astVpssChnAttr[VpssChn].stFastFlow.u32Depth = 12;
+		// if (grp_num == 2) {
+		// 	astVpssChnAttr[VpssChn].stFastFlow.enFastFlow = FAST_FLOW_MODE_STITCH; //FAST_FLOW_MODE_STITCH;
+		// } else {
+		// 	astVpssChnAttr[VpssChn].stFastFlow.enFastFlow = FAST_FLOW_MODE_NORMAL; //FAST_FLOW_MODE_STITCH;
+		// }
+	//}
     astVpssChnAttr[VpssChn].u32MaxW                     = stSize.u32Width;
     astVpssChnAttr[VpssChn].u32MaxH                     = stSize.u32Height;
     astVpssChnAttr[VpssChn].u32Width                    = stSize.u32Width;
@@ -432,6 +471,17 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
 	SAMPLE_CPM_GetChnMode(eChnMode, &stAlgChnSize);
 
     VpssChn = 1;
+
+    //if (VpssChn == 1) {
+		//stSize.u32Width = 640;
+		//stSize.u32Height = 360;
+	//	astVpssChnAttr[VpssChn].stFastFlow.u32Depth = 12;
+		// if (grp_num == 2) {
+		// 	astVpssChnAttr[VpssChn].stFastFlow.enFastFlow = FAST_FLOW_MODE_STITCH; //FAST_FLOW_MODE_STITCH;
+		// } else {
+		// 	astVpssChnAttr[VpssChn].stFastFlow.enFastFlow = FAST_FLOW_MODE_NORMAL; //FAST_FLOW_MODE_STITCH;
+		// }
+	//}
     astVpssChnAttr[VpssChn].u32MaxW                    = stAlgChnSize.width;
     astVpssChnAttr[VpssChn].u32MaxH                    = stAlgChnSize.hight;
     astVpssChnAttr[VpssChn].u32Width                    = stAlgChnSize.width;
@@ -522,6 +572,20 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
 			VpssGrp, i, CPMGrp, i);
 	}
 
+    	// s32Ret = SAMPLE_COMM_VPSS_Bind_CPM(VpssGrp, 0, CPMGrp, 0);
+		// if (TS_SUCCESS != s32Ret)
+		// {
+		// 	SAMPLE_PRT("SAMPLE_COMM_VPSS_Bind_CPM failed for %#x!\n", s32Ret);
+		// 	goto EXIT_VENC_H265_STOP;
+		// }
+
+    	// s32Ret = SAMPLE_COMM_VPSS_Bind_CPM(VpssGrp, 1, 1, 0);
+		// if (TS_SUCCESS != s32Ret)
+		// {
+		// 	SAMPLE_PRT("SAMPLE_COMM_VPSS_Bind_CPM failed for %#x!\n", s32Ret);
+		// 	goto EXIT_VENC_H265_STOP;
+		// }
+
      enRcMode = SAMPLE_RC_CBR;
 	 enGopMode = VENC_GOPMODE_NORMALP;
 
@@ -535,7 +599,15 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
 
 
 	/***encode h.265 **/
-	s32Ret = SAMPLE_COMM_VENC_Start(VencChn[0], enPayLoad[0],enPicSize, 30, enRcMode, u32Profile[0],&stGopAttr); //new
+	s32Ret = SAMPLE_COMM_VENC_Start(VencChn[0], enPayLoad[0],enPicSize,20, enRcMode, u32Profile[0],&stGopAttr); //new
+	//s32Ret = SAMPLE_COMM_VENC_Start(VencChn[0], enPayLoad[0],enPicSize, enRcMode,u32Profile[0],bRcnRefShareBuf,&stGopAttr); //old
+	if (TS_SUCCESS != s32Ret)
+	{
+		SAMPLE_PRT("Venc Start failed for %#x!\n", s32Ret);
+	}
+
+    /***encode h.265 **/
+	s32Ret = SAMPLE_COMM_VENC_Start(VencChn[1], enPayLoad[0],enPicSize,20, enRcMode, u32Profile[0],&stGopAttr); //new
 	//s32Ret = SAMPLE_COMM_VENC_Start(VencChn[0], enPayLoad[0],enPicSize, enRcMode,u32Profile[0],bRcnRefShareBuf,&stGopAttr); //old
 	if (TS_SUCCESS != s32Ret)
 	{
@@ -549,9 +621,17 @@ TS_S32 SAMPLE_VI_VPSS_MULTICPM_VENC(SAMPLE_SNS_TYPE_E eSensor0, SAMPLE_ALG_TYPE_
         goto EXIT_VENC_H265_UnBind;
     }
 
+    s32Ret = SAMPLE_COMM_VPSS_Bind_VENC(0,1,1);
+    if (TS_SUCCESS != s32Ret)
+    {
+        SAMPLE_PRT("SAMPLE_COMM_VI_Bind_VPSS failed for %#x!\n", s32Ret);
+        goto EXIT_VENC_H265_UnBind;
+    }
 
 
-    s32Ret = SAMPLE_COMM_VENC_StartGetStreamV2(VencChn,s32ChnNum,SAMPLE_VENC_RTSP);
+
+    s32Ret = SAMPLE_COMM_VENC_StartGetStreamV2(VencChn,2,SAMPLE_VENC_RTSP);
+    //s32Ret = SAMPLE_COMM_VENC_StartGetStreamV2(VencChn,2,SAMPLE_VENC_RTSP);
     if (TS_SUCCESS != s32Ret)
     {
         SAMPLE_PRT("Start Venc failed!\n");
@@ -698,7 +778,8 @@ int main(int argc, char *argv[])
 	}
 #endif
 
-    s32Ret = SAMPLE_VI_VPSS_MULTICPM_VENC(snsType,  &enCurMask, 1, eChnMode);
+    //s32Ret = SAMPLE_VI_VPSS_MULTICPM_VENC(snsType,  &enCurMask,2, eChnMode);
+	s32Ret = SAMPLE_VI_VPSS_MULTICPM_VENC(snsType,  &enCurMask,2, eChnMode);
     if (TS_SUCCESS == s32Ret)
 		SAMPLE_PRT("program exit normally!\n");
 	else

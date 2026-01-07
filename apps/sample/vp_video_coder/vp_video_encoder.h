@@ -9,7 +9,7 @@ extern "C" {
 #include "vp_video_coder_config.h"
 #include "vp_video_encoder_platform.h"
 
-#define VP_SENSOR_NUM 1
+#define VP_SENSOR_NUM 2
 
 /**
  * 初始化视频编码模块

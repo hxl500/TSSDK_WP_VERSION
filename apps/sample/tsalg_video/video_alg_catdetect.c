@@ -39,10 +39,76 @@ TS_S32 VIDEO_ALG_CatDetect_Init(TS_VOID **pHandle)
         return s32Ret;
 }
 
+
+int Alarm_time_static1()
+{
+	struct tm *tm_ptr;
+	struct timeval tv;
+	char str[25] = { 0 };
+	;
+	char str_dada[100] = { 0 };
+	gettimeofday(&tv, NULL);
+
+	time_t now = time(NULL);
+	tm_ptr = localtime(&now);
+	//printf("Year: %d\n", tm_ptr->tm_year + 1900);
+	// printf("Month: %d\n", tm_ptr->tm_mon + 1);
+	// printf("Day: %d\n", tm_ptr->tm_mday);
+	// printf("Hour: %d\n", tm_ptr->tm_hour);
+	// printf("Minute: %d\n", tm_ptr->tm_min);
+	// printf("Second: %d\n", tm_ptr->tm_sec);
+	// printf("Millisecond: %d\n", tv.tv_usec / 1000);
+	// strcat(timedata,itoa(tm_ptr->tm_year + 1900));
+	// strcat(timedata,itoa(tm_ptr->tm_mon + 1));
+	// strcat(timedata,itoa(tm_ptr->tm_mday));
+	// strcat(timedata,itoa(tm_ptr->tm_hour));
+	// strcat(timedata,itoa(tm_ptr->tm_min));
+	// strcat(timedata,itoa(tm_ptr->tm_sec));
+	// strcat(timedata,itoa(tv.tv_usec / 1000));
+
+	sprintf(str, "%d", tm_ptr->tm_year + 1900);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "年");
+	sprintf(str, "%d", tm_ptr->tm_mon + 1);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "月");
+
+	sprintf(str, "%d", tm_ptr->tm_mday);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "日");
+	sprintf(str, "%d", tm_ptr->tm_hour);
+	strcat(str_dada, str);
+	strcat(str_dada, "时");
+
+	sprintf(str, "%d", tm_ptr->tm_min);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "分");
+
+	sprintf(str, "%d", tm_ptr->tm_sec);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "秒");
+
+	sprintf(str, "%d", tv.tv_usec / 1000);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "毫秒");
+
+	//memcpy(timedata,str_dada,sizeof(str_dada));
+	//strcpy(timedata,str_dada);
+	printf("str_dada:%s\n", str_dada);
+	//timedata = str_dada;
+	return 0;
+}
 TS_S32 VIDEO_ALG_CatDetect_Proc_user(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE_S *pImageDet, TS_VOID *pResult)
 {
 	SAMPLE_ALG_RESULT_S *pCurResult = (SAMPLE_ALG_RESULT_S *)pResult;
     	ALG_CatDetect_DET_RESULT_S *pTmpResult = &(pCurResult->gstAlgCatdetResult);
+	Alarm_time_static1();
 	return VIDEO_ALG_CatDetect_Proc(pHandle,pImage,pImageDet,pTmpResult);
 //TS_S32 VIDEO_ALG_CatDetect_Proc(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE_S *pImageDet, ALG_CatDetect_DET_RESULT_S *pResult);
 //	return 0;
@@ -57,7 +123,7 @@ TS_VOID  VIDEO_ALG_CatDetect_ResultProc(TS_U8 *pYuvBuf,  TS_U32 width, TS_U32 he
         RECT rect;
 	int test_conf;
 	for(TS_U32 i = 0; i < pResult->u32ObjNum; i++) {
-		if(pResult->stBox[i].act != ALG_CAT_ACT_INT && pResult->stBox[i].act != ALG_CAT_ACT_EAT){
+		if(pResult->stBox[i].act != ALG_CAT_ACT_INT && pResult->stBox[i].act != ALG_CAT_ACT_EAT){//hxl 取消侧脸限制 2025.12.26
 			continue;
 		}
 		rect.left = u32ImageRatio * pResult->stBox[i].f32Xmin  * width;
@@ -65,8 +131,10 @@ TS_VOID  VIDEO_ALG_CatDetect_ResultProc(TS_U8 *pYuvBuf,  TS_U32 width, TS_U32 he
         	rect.right = u32ImageRatio * pResult->stBox[i].f32Xmax * width;
         	rect.bottom = u32ImageRatio *pResult->stBox[i].f32Ymax * height;
 		YUV_Draw_Rect(pYuvBuf, width, height, 12, &rect, YUV_BLUE, 5);
+		const char* person = "person";
+		overlay_letter(person, pYuvBuf, width, height, rect.left, rect.top, YUV_RED, 2);
 
-		//YUY_Draw_num(pYuvBuf, width, height, 80,rect.right+x2+10+48, rect.top+120, test_conf%10, YUV_BLUE);
+		//YUY_Draw_num(pYuvBuf, width, height, 80,rect.right+2+10+48, rect.top+120, test_conf%10, YUV_BLUE);
 
 		YUY_Draw_num(pYuvBuf, width, height, 80,rect.right+30, rect.top, pResult->stBox[i].class_id, YUV_BLUE);
 		
@@ -79,7 +147,7 @@ TS_VOID  VIDEO_ALG_CatDetect_ResultProc(TS_U8 *pYuvBuf,  TS_U32 width, TS_U32 he
 		test_conf = test_conf%100;
 		YUY_Draw_num(pYuvBuf, width, height, 80,rect.right+30, rect.top+60, test_conf/10, YUV_BLUE);
 		YUY_Draw_num(pYuvBuf, width, height, 80,rect.right+30+30, rect.top+60,test_conf%10 , YUV_BLUE);
-#if 0		
+#if 1		
 		int idlen;
 		char ids[64];
 		sprintf(ids,"%s",pResult->stBox[i].nameid);
