@@ -915,6 +915,28 @@ typedef struct tsISP_CNR_ATTR_S {
 	TS_U16 cnr_fc_sup_y3;
 } ISP_CNR_ATTR_S;
 
+/***************************************************
+*				ir auto attr					   *  
+***************************************************/
+	
+typedef enum {
+    ISP_IR_SWITCH_TO_NONE,
+	ISP_IR_SWITCH_TO_DAY,
+	ISP_IR_SWITCH_TO_NIGHT,
+	ISP_IR_SWITCH_STATUS_BUTT,
+}ISP_IR_SWITCH_STATUS_E;
+	
+typedef struct{
+	TS_U32                 Day2NightThresh;  //  defaultValue="2004604572" numberType="uint" min="0" max="4096" edit="true"
+	TS_U32                 IrNight2DayThresh;
+    TS_U32                 WlNight2DayThresh;
+    TS_U32                 RgMax;
+    TS_U32                 RgMin;
+    TS_U32                 BgMax;
+    TS_U32                 BgMin;
+	ISP_IR_SWITCH_STATUS_E IR_switch;
+}ISP_IR_AUTO_ATTR_S;
+
 
 #ifdef __cplusplus
 #if __cplusplus

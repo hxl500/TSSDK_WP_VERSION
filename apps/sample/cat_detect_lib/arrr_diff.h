@@ -16,10 +16,11 @@ float get_simi();
 struct cat_in{
 	char nameid[64];
 	int act;
-	int lasttime;
-	int lasttimeEat;
+	long long lasttime;
+	long long lasttimeEat;
 	char first_in;
 	char first_eat;
+	char event_type;  // 0: 无事件, 1: 进入事件, 2: 进食事件
 };
 void set_result(ALG_CatDetect_DET_RESULT_S *data);
 void set_eta_thres(const float Thres);

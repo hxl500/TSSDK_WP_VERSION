@@ -406,12 +406,11 @@ int rsn_detect_file2(char *src_file,float *result,float *result2)
 	return -1;
 	//goto RSN_DETECT_FILE_END;
     }
-	char *buf = malloc(dst_w*dst_h*4);
+	char buf[dst_w*dst_h*4];
     int r = fread((char*)buf, 1, dst_w*dst_h*4, file);
     if(r < 1)
     {
     	printf("can't read file %s\n", src_file);
-		free(buf);
 		fclose(file);
 		return -2;
     }
@@ -420,7 +419,6 @@ int rsn_detect_file2(char *src_file,float *result,float *result2)
 	
 	desaturate_rgba((RGBA*)buf,dst_w,dst_h);
 	get_rsn_reault(buf,result2);
-	free(buf);
 	printf("rsn file ok =%s\n",src_file);
 	return 0;
 }
@@ -535,12 +533,15 @@ char my_crop_resize_detect(ALG_IMAGE_S *srcImg, RECT *prect,char *idstr)
 
 	memset(AlgoFaceRecogIn.pData, 114, alg_rgb_size);
 
+    TS_S32 stImageBufSize = AlgoFaceRecogIn.s32H*AlgoFaceRecogIn.s32W*2;
+    TS_U8 stImageBuf[stImageBufSize];
+    
     ALG_IMAGE_S stImage;
     stImage.s32C = 1;
     stImage.s32H = AlgoFaceRecogIn.s32H;
     stImage.s32W = AlgoFaceRecogIn.s32W;
-    stImage.pData = malloc(stImage.s32H*stImage.s32W*2);
-    memset(stImage.pData, 0, stImage.s32H*stImage.s32W*2);
+    stImage.pData = stImageBuf;
+    memset(stImage.pData, 0, stImageBufSize);
 
 
     ALG_SUB_IMAGE_S sub;
@@ -763,11 +764,6 @@ char my_crop_resize_detect(ALG_IMAGE_S *srcImg, RECT *prect,char *idstr)
 	TS_MPI_VB_DestroyPool(vbPool);
 
 	id = get_catName_id(rsn_reault,idstr);//数据库查找
-	if(stImage.pData)
-	{
-		free(stImage.pData);
-		stImage.pData =NULL;
-	}
 	return id;
 
 	//return TS_SUCCESS;

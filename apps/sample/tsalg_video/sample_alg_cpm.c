@@ -25,17 +25,30 @@
 #include "ts_rne_device.h"
 #include "ts_alg_gp_layers.h"
 #include "mpi_sys.h"
-//#include "soft_line.h"
+// #include "soft_line.h"
 
-#define USE_CPM  1  // not run proc cpm_process
+#include "video_alg_catdetect-api.h"
 
-#define QI_LOG  1
+#define USE_CPM 1
+
+#define SINGLE_WIDTH 640
+#define SINGLE_HEIGHT 360
+#define DST_WIDTH 640
+#define DST_HEIGHT 640
+#define ALG_RGBA_CHN 4
+#define ALG_RGB_SIZE (DST_WIDTH * DST_HEIGHT * ALG_RGBA_CHN)
+#define ALGO_YUV_SIZE (DST_WIDTH * DST_HEIGHT * 3 / 2)
+#define CPM_ALG_CYCLE 100
+#define VI_GET_FRAME_TIMEOUT 1000
+#define VI_DEV_ID 0
+#define VI_CHN_ID 1
+
 /*******************************************************
  * *
  * *    alg instance init table
  * *
-********************************************************/
-static SAMPLE_ALG_INIT_CFG_S gstAlgInitTbl[] ={
+ ********************************************************/
+static SAMPLE_ALG_INIT_CFG_S gstAlgInitTbl[] = {
 #if ALG_MOTIONDETECT
     {SAMPLE_ALG_MASK_MOTION, VIDEO_ALG_Motion_Init, "MotionDetect", VIDEO_CHN_MODE0},
 #endif
@@ -56,73 +69,75 @@ static SAMPLE_ALG_INIT_CFG_S gstAlgInitTbl[] ={
 #endif
 };
 
-
 /*******************************************************
  * *
  * *    alg cpm model
  * *
-********************************************************/
+ ********************************************************/
 
-static SAMPLE_VIDEO_ALG_CPM gstSampleVideoAlgCpm;
+SAMPLE_VIDEO_ALG_CPM gstSampleVideoAlgCpm[2];
+ALG_IMAGE_S AlgoFaceIn;
+ALG_IMAGE_S AlgoSrcFaceIn;
+pthread_mutex_t g_AlgoFaceInLock = PTHREAD_MUTEX_INITIALIZER;
 
-TS_S32  SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle);
+TS_S32 SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle);
 TS_VOID SAMPLE_ALG_CPM_HANDLE_Exit(TS_VOID *pHandle);
-TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **out);
-TS_S32  SAMPLE_ALG_CPM_HANDLE_SetParam(TS_VOID *pHandle, TS_VOID *pParam);
-TS_S32  SAMPLE_ALG_CPM_HANDLE_GetParam(TS_VOID *pHandle, TS_VOID *pParam);
-TS_S32  SAMPLE_ALG_CPM_HANDLE_GetResult(TS_VOID *pHandle, TS_VOID *pResult);
-TS_S32  SAMPLE_ALG_CPM_HANDLE_ReleaseResult(TS_VOID *pHandle, TS_VOID *pResult);
+TS_S32 SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **out);
+TS_S32 SAMPLE_ALG_CPM_HANDLE_SetParam(TS_VOID *pHandle, TS_VOID *pParam);
+TS_S32 SAMPLE_ALG_CPM_HANDLE_GetParam(TS_VOID *pHandle, TS_VOID *pParam);
+TS_S32 SAMPLE_ALG_CPM_HANDLE_GetResult(TS_VOID *pHandle, TS_VOID *pResult);
+TS_S32 SAMPLE_ALG_CPM_HANDLE_ReleaseResult(TS_VOID *pHandle, TS_VOID *pResult);
 
-
-TS_VOID SAMPLE_CPM_GetSrcSize(TS_U32 *pw, TS_U32 *ph)
+TS_VOID SAMPLE_CPM_GetSrcSize(TS_U32 *pw, TS_U32 *ph, TS_U32 CPMGrp)
 {
-    if (TS_NULL == pw || TS_NULL == ph) {
+    if (TS_NULL == pw || TS_NULL == ph)
+    {
         ALG_LOGE("SAMPLE_CPM_GetSrcSize error, NULL ptr \n");
         return;
     }
 
-    *pw = gstSampleVideoAlgCpm.u32Width;
-    *ph = gstSampleVideoAlgCpm.u32Height;
+    *pw = gstSampleVideoAlgCpm[CPMGrp].u32Width;
+    *ph = gstSampleVideoAlgCpm[CPMGrp].u32Height;
 }
 
-static TS_S32 SAMPLE_ALG_Init_Instances(SAMPLE_ALG_INSTANCE_S ** ppAlgoInst_tbl, SAMPLE_ALG_TYPE_E* penAlgMask, TS_U32	u32AlgNum)
+static TS_S32 SAMPLE_ALG_Init_Instances(SAMPLE_ALG_INSTANCE_S **ppAlgoInst_tbl, SAMPLE_ALG_TYPE_E *penAlgMask, TS_U32 u32AlgNum)
 {
     TS_U32 i, j, idx = 0;
-    SAMPLE_ALG_INSTANCE_S* pInst;
-    bool  bCurFlag;
-    TS_U32 u32CpmAlgNum = sizeof(gstAlgInitTbl)/sizeof(SAMPLE_ALG_INIT_CFG_S);
+    SAMPLE_ALG_INSTANCE_S *pInst;
+    bool bCurFlag;
+    TS_U32 u32CpmAlgNum = sizeof(gstAlgInitTbl) / sizeof(SAMPLE_ALG_INIT_CFG_S);
 
-	for(i=0; i < u32AlgNum; i++)
+    for (i = 0; i < u32AlgNum; i++)
     {
         bCurFlag = false;
-        for(j=0; j < u32CpmAlgNum; ++j)
+        for (j = 0; j < u32CpmAlgNum; ++j)
         {
-            if(gstAlgInitTbl[j].eMask == penAlgMask[i])
+            if (gstAlgInitTbl[j].eMask == penAlgMask[i])
             {
                 pInst = (SAMPLE_ALG_INSTANCE_S *)malloc(sizeof(SAMPLE_ALG_INSTANCE_S));
-                if(!pInst)
+                if (!pInst)
                     return idx;
 
-                memset(pInst, 0,sizeof(SAMPLE_ALG_INSTANCE_S));
+                memset(pInst, 0, sizeof(SAMPLE_ALG_INSTANCE_S));
 
-                if(gstAlgInitTbl[j].pInit((void**)&pInst) != TS_SUCCESS)
+                if (gstAlgInitTbl[j].pInit((void **)&pInst) != TS_SUCCESS)
                     goto algo_init_instance_faild;
 
                 pInst->enAlgType = gstAlgInitTbl[j].eMask;
                 *(ppAlgoInst_tbl + idx) = pInst;
-                printf("ALG_Init_Instances, alg_type=0x%x, index=%d\n",penAlgMask[i], idx);
+                printf("ALG_Init_Instances, alg_type=0x%x, index=%d\n", penAlgMask[i], idx);
                 idx++;
                 bCurFlag = true;
                 break;
             }
         }
-        if(!bCurFlag)
+        if (!bCurFlag)
             ALG_LOGE("not support algMask=%d \n", penAlgMask[i]);
     }
     return idx;
 
 algo_init_instance_faild:
-    if(pInst)
+    if (pInst)
         free(pInst);
 
     return idx;
@@ -130,26 +145,26 @@ algo_init_instance_faild:
 
 void SAMPLE_CPM_GetChnMode(SAMPLE_VIDEO_CHN_MODE mode, SAMPLE_ALG_CHN_IMG_SIZE_S *pstAlgChnSize)
 {
-    switch(mode)
+    switch (mode)
     {
-        case VIDEO_CHN_MODE0:
-            pstAlgChnSize->width = 640;
-            pstAlgChnSize->hight = 360;
-            pstAlgChnSize->hight_ex = 24;
-            break;
-        case VIDEO_CHN_MODE1:
-            pstAlgChnSize->width = 1280;
-            pstAlgChnSize->hight = 720;
-            pstAlgChnSize->hight_ex = 16;
-            break;
-        default:
-            pstAlgChnSize->width = 640;
-            pstAlgChnSize->hight = 360;
-            pstAlgChnSize->hight_ex = 24;
-            break;
+    case VIDEO_CHN_MODE0:
+        pstAlgChnSize->width = 640;
+        pstAlgChnSize->hight = 360;
+        pstAlgChnSize->hight_ex = 24;
+        break;
+    case VIDEO_CHN_MODE1:
+        pstAlgChnSize->width = 1280;
+        pstAlgChnSize->hight = 720;
+        pstAlgChnSize->hight_ex = 16;
+        break;
+    default:
+        pstAlgChnSize->width = 640;
+        pstAlgChnSize->hight = 360;
+        pstAlgChnSize->hight_ex = 24;
+        break;
     }
 
-    printf("SAMPLE_CPM_GetChnMode, [w, h, exp_h]->[%d, %d, %d] \n", pstAlgChnSize->width,\
+    printf("SAMPLE_CPM_GetChnMode, [w, h, exp_h]->[%d, %d, %d] \n", pstAlgChnSize->width,
            pstAlgChnSize->hight, pstAlgChnSize->hight_ex);
 }
 
@@ -182,7 +197,7 @@ static TS_S32 SaveYuvImage(const TS_CHAR *filepath, TS_U8 *yuv_data, const TS_S3
 #endif
 
 #if USE_CPM
-static TS_S32 SAMPLE_ALG_Yuv2Rgb(TS_U8 *y_image, TS_U8 *uv_image, TS_U8 *rgb_image,TS_U32 src_width, TS_U32 src_height, TS_U32 des_width, TS_U32 des_height, ALG_RGB_TYPE_E rgb_type)
+static TS_S32 SAMPLE_ALG_Yuv2Rgb(TS_U8 *y_image, TS_U8 *uv_image, TS_U8 *rgb_image, TS_U32 src_width, TS_U32 src_height, TS_U32 des_width, TS_U32 des_height, ALG_RGB_TYPE_E rgb_type)
 {
 #if 0
     FILE *fp0 = NULL;
@@ -196,10 +211,11 @@ static TS_S32 SAMPLE_ALG_Yuv2Rgb(TS_U8 *y_image, TS_U8 *uv_image, TS_U8 *rgb_ima
 	fread(yuv_image, 1, image_width * image_height * 3 /2, fp0);
 	fclose(fp0);
 #endif
-	if(!y_image || !uv_image || !rgb_image){
-		SAMPLE_PRT("buf buf buf is NULL!\n");
-	}
-	TS_ALG_YUV2RGB(y_image, uv_image, rgb_image, src_width, src_height, des_width, des_height, rgb_type);
+    if (!y_image || !uv_image || !rgb_image)
+    {
+        SAMPLE_PRT("buf buf buf is NULL!\n");
+    }
+    TS_ALG_YUV2RGB(y_image, uv_image, rgb_image, src_width, src_height, des_width, des_height, rgb_type);
 #if 0
 	fp1 = fopen("./out.rgb", "w+");
 	fwrite(rgb_image, 1, image_width * image_height * 3, fp1);
@@ -211,17 +227,17 @@ static TS_S32 SAMPLE_ALG_Yuv2Rgb(TS_U8 *y_image, TS_U8 *uv_image, TS_U8 *rgb_ima
 
 SAMPLE_ALG_INIT_CFG_S *SAMPLE_ALG_GetInitCfg(TS_U32 *pNum)
 {
-    if (NULL == pNum) {
+    if (NULL == pNum)
+    {
         ALG_LOGE("SAMPLE_ALG_GetInitCfg param is NULL!\n");
         return NULL;
     }
 
-    *pNum =  sizeof(gstAlgInitTbl)/sizeof(SAMPLE_ALG_INIT_CFG_S);
+    *pNum = sizeof(gstAlgInitTbl) / sizeof(SAMPLE_ALG_INIT_CFG_S);
     return gstAlgInitTbl;
 }
 
-
-TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U32 u32Height, SAMPLE_ALG_TYPE_E* penAlgType, TS_U32 u32AlgNum, SAMPLE_ALG_CHN_IMG_SIZE_S* pstAlgChnSize)
+TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U32 u32Height, SAMPLE_ALG_TYPE_E *penAlgType, TS_U32 u32AlgNum, SAMPLE_ALG_CHN_IMG_SIZE_S *pstAlgChnSize)
 {
     TS_S32         s32Ret = TS_SUCCESS;
     TS_S32  i = 0;
@@ -234,27 +250,29 @@ TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U3
     }
 
     memset(&stCPMGrpAttr, 0, sizeof(CPM_GRP_ATTR_S));
-    stCPMGrpAttr.u32GrpId        =  0;
-    stCPMGrpAttr.u32PipeNum      =  pipeNum;
-    stCPMGrpAttr.u32ChnNum       =  1;
-    stCPMGrpAttr.u32Interval     =  1;
-    stCPMGrpAttr.bSyncPipe		 = TS_FALSE;
+    stCPMGrpAttr.u32GrpId = 0;
+    stCPMGrpAttr.u32PipeNum = pipeNum;
+    stCPMGrpAttr.u32ChnNum = 1;
+    stCPMGrpAttr.u32Interval = 1;
+    stCPMGrpAttr.bSyncPipe = TS_FALSE;
     stCPMGrpAttr.stChnAttr[0].u32Width = u32Width;
     stCPMGrpAttr.stChnAttr[0].u32Height = u32Height;
     stCPMGrpAttr.stChnAttr[0].enPixelFormat = PIXEL_FORMAT_NV_12;
+     
+    //stCPMGrpAttr.stChnAttr[0].u32Depth = 8;
 
-    memset(&gstSampleVideoAlgCpm, 0, sizeof(SAMPLE_VIDEO_ALG_CPM));
-    gstSampleVideoAlgCpm.u32AlgNum = u32AlgNum;
-    memcpy(gstSampleVideoAlgCpm.enAlgMask, penAlgType, u32AlgNum*sizeof(SAMPLE_ALG_TYPE_E));
-    gstSampleVideoAlgCpm.u32Width = u32Width;
-    gstSampleVideoAlgCpm.u32Height = u32Height;
+    memset(&gstSampleVideoAlgCpm[CPMGrp], 0, sizeof(SAMPLE_VIDEO_ALG_CPM));
+    gstSampleVideoAlgCpm[CPMGrp].u32AlgNum = u32AlgNum;
+    memcpy(gstSampleVideoAlgCpm[CPMGrp].enAlgMask, penAlgType, u32AlgNum * sizeof(SAMPLE_ALG_TYPE_E));
+    gstSampleVideoAlgCpm[CPMGrp].u32Width = u32Width;
+    gstSampleVideoAlgCpm[CPMGrp].u32Height = u32Height;
 
-    gstSampleVideoAlgCpm.stALgChnSize.hight = pstAlgChnSize->hight;
-    gstSampleVideoAlgCpm.stALgChnSize.width = pstAlgChnSize->width;
-    gstSampleVideoAlgCpm.stALgChnSize.hight_ex = pstAlgChnSize->hight_ex;
+    gstSampleVideoAlgCpm[CPMGrp].stALgChnSize.hight = pstAlgChnSize->hight;
+    gstSampleVideoAlgCpm[CPMGrp].stALgChnSize.width = pstAlgChnSize->width;
+    gstSampleVideoAlgCpm[CPMGrp].stALgChnSize.hight_ex = pstAlgChnSize->hight_ex;
 
-    printf("SAMPLE_ALGO_CPM_Config AlgNum =%d, AlgChansize[w,h,h_ex]=[%d,%d,%d]\n",  gstSampleVideoAlgCpm.u32AlgNum, \
-           pstAlgChnSize->width, pstAlgChnSize->hight, pstAlgChnSize->hight_ex) ;
+    printf("SAMPLE_ALGO_CPM_Config AlgNum =%d, AlgChansize[w,h,h_ex]=[%d,%d,%d]\n", gstSampleVideoAlgCpm[CPMGrp].u32AlgNum,
+           pstAlgChnSize->width, pstAlgChnSize->hight, pstAlgChnSize->hight_ex);
 
     /*s32Ret = TS_MPI_CPM_CreateGrp(CPMGrp, &stCPMGrpAttr);
    if (TS_SUCCESS != s32Ret)
@@ -290,7 +308,6 @@ TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U3
     stCPMHandle.get_result = SAMPLE_ALG_CPM_HANDLE_GetResult;
     stCPMHandle.release_result = SAMPLE_ALG_CPM_HANDLE_ReleaseResult;
 
-
     /*start cpm*/
 #if SDK_VERSON_030
     s32Ret = SAMPLE_COMM_CPM_StartNew(CPMGrp, &stCPMGrpAttr, &stCPMHandle);
@@ -310,354 +327,291 @@ TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U3
 
     return TS_SUCCESS;
 
-
-
 exit:
     TS_MPI_CPM_DestroyGrp(CPMGrp);
 
     return TS_FAILURE;
-
-}
-
-unsigned long long getSystemTime()
-{
-	//struct timeval tv1;
-	//gettimeofday(&tv1, NULL);
-	//return (unsigned long long)(tv1.tv_sec * 1000LL) + (tv1.tv_usec / 1000);
-	unsigned long long int pts = 0;
-	struct timeval tv1;
-	gettimeofday(&tv1, NULL);
-	pts = (unsigned long long int)tv1.tv_sec * 1000 + (tv1.tv_usec / 1000);
-	return (long)pts;
 }
 
 #if USE_CPM
-static TS_S32  SAMPLE_ALG_Result_Proc(TS_U8 *YuvBuf,  SAMPLE_ALG_RESULT_S* pstAlgResult)
+static TS_S32 SAMPLE_ALG_Result_Proc(TS_U8 *YuvBuf, SAMPLE_ALG_RESULT_S *pstAlgResult, TS_U32 CPMGrp)
 {
-    TS_U32 width = gstSampleVideoAlgCpm.u32Width;
-    TS_U32 height = gstSampleVideoAlgCpm.u32Height;
+    TS_U32 width = gstSampleVideoAlgCpm[CPMGrp].u32Width;
+    TS_U32 height = gstSampleVideoAlgCpm[CPMGrp].u32Height;
     TS_U32 ImageRatio = 1;
 
-    //unsigned char * YuvBuf = (unsigned char *)(TS_UL)(in->stVFrame.u64VirAddr[0]);
-	if (NULL == YuvBuf || NULL== pstAlgResult) {
-		printf(" SAMPLE_ALG_ResultDraw, Param Is Null !\n");
-		return TS_FAILURE;
-	}
+    // unsigned char * YuvBuf = (unsigned char *)(TS_UL)(in->stVFrame.u64VirAddr[0]);
+    if (NULL == YuvBuf || NULL == pstAlgResult)
+    {
+        printf(" SAMPLE_ALG_ResultDraw, Param Is Null !\n");
+        return TS_FAILURE;
+    }
 
-	TS_S32 i;
-	for (i=0; i< gstSampleVideoAlgCpm.u32ActualAlgNum; ++i) {
-        if (gstSampleVideoAlgCpm.pstAlgInstList[i]->pf_Result_Process != NULL ) {
-            gstSampleVideoAlgCpm.pstAlgInstList[i]->pf_Result_Process(YuvBuf, width, height, ImageRatio, (TS_VOID*)pstAlgResult);
+    TS_S32 i;
+    for (i = 0; i < gstSampleVideoAlgCpm[CPMGrp].u32ActualAlgNum; ++i)
+    {
+        if (gstSampleVideoAlgCpm[CPMGrp].pstAlgInstList[i]->pf_Result_Process != NULL)
+        {
+            gstSampleVideoAlgCpm[CPMGrp].pstAlgInstList[i]->pf_Result_Process(YuvBuf, width, height, ImageRatio, (TS_VOID *)pstAlgResult);
         }
-	}
+    }
 
     return TS_SUCCESS;
 }
 #endif
+ 
 
-int save_algo_yuv(void *yuv_data, int cnt)
+#define VI_DEV_ID 1//1                              // VI设备号
+#define VI_CHN_ID 1                              // VI通道号
+#define CPM_ALG_CYCLE 20                         // CPM算法周期(ms)
+#define VI_GET_FRAME_TIMEOUT (CPM_ALG_CYCLE / 2) // 取帧超时时间
+#define VI_FRAME_BUF_DEPTH 4                     // VI通道帧缓存深度
+ 
+
+
+unsigned long long getSystemTime()
 {
-	int height = 640; //640;
-	int width = 360; //360;
-	FILE *pFile = NULL;
-	char *dir_path = "/mnt/sda0/weipai";
-	char filepath[200] = {
-		0,
-	};
-	snprintf(filepath, sizeof(filepath) - 1, "%s/%d.img", dir_path, cnt);
-	printf("***filepath***:%s\n", filepath);
-	if ((pFile = fopen(filepath, "wb")) == NULL) {
-		ALG_LOGD(" fopen %s failed !. \n", filepath);
-		return TS_FAILURE;
-	}
-
-	if (NULL != yuv_data) {
-		size_t bytesToWrite = width * height * 3 / 2; // YUV420 格式下，总字节数为图像宽高的 1.5 �?
-		size_t bytesWritten = fwrite(yuv_data, 1, bytesToWrite, pFile);
-		if (bytesWritten != bytesToWrite) {
-			fprintf(stderr, "Failed to write all YUV data to file !.\n");
-		}
-	}
-
-	// 释放资源
-	fclose(pFile);
-	pFile = NULL;
-
-	ALG_LOGD(" szInfo: %s done \n", filepath);
-
-	return TS_SUCCESS;
+    // struct timeval tv1;
+    // gettimeofday(&tv1, NULL);
+    // return (unsigned long long)(tv1.tv_sec * 1000LL) + (tv1.tv_usec / 1000);
+    unsigned long long int pts = 0;
+    struct timeval tv1;
+    gettimeofday(&tv1, NULL);
+    pts = (unsigned long long int)tv1.tv_sec * 1000 + (tv1.tv_usec / 1000);
+    return (long)pts;
 }
 
-TS_S32 split_vpss_stitch_yuv420(TS_S32 chn_num,TS_S32 chn, TS_VOID *yuv_image, TS_U32 image_width, TS_U32 image_height,
-				TS_VOID *out_buf);
-TS_S32 split_vpss_stitch_yuv420(TS_S32 chn_num,TS_S32 chn, TS_VOID *yuv_image, TS_U32 image_width, TS_U32 image_height,
-				TS_VOID *out_buf)
-{
-	if (NULL == yuv_image || NULL == out_buf) {
-		SAMPLE_PRT("param buffer is null\n", chn);
-		return -1;
-	}
-
-	if (0 == chn) {
-		memcpy(out_buf, yuv_image, image_width * image_height);
-#if defined(DBG_JCY_YHJC)
-		memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height),
-		       image_width * image_height / 2);
-#else
-		if (2 == chn_num) {
-			memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height) * 2,
-			       image_width * image_height / 2);
-		} else {
-			memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height),
-			       image_width * image_height / 2);
-		}
-
-#endif
-	} else if (1 == chn) {
-		memcpy(out_buf, yuv_image + image_width * image_height, image_width * image_height);
-		memcpy(out_buf + image_width * image_height, yuv_image + (image_width * image_height) * 5 / 2,
-		       image_width * image_height / 2);
-        if (2 == chn_num)
-        {
-            memcpy(out_buf+image_width * image_height*3/2, yuv_image + image_width * image_height*3, image_width * image_height*3/2);
-            //memcpy(out_buf+image_width * image_height*5/2, yuv_image + image_width * image_height*3, image_width * image_height*3/2);
-        }
-	} else {
-		SAMPLE_PRT("chn out of range:%d\n", chn);
-		return -2;
-	}
-	return 0;
-}
-//cpm process thread
-static TS_VOID* SAMPLE_CPM_ALG_Process(void* p)
+static TS_VOID *SAMPLE_CPM_ALG_Process(void *p)
 {
 #if USE_CPM
-    TS_S32  s32Ret = TS_SUCCESS;
-    static TS_S32  Frame_count = 0;
-    //char yuvFile[256] = {0};
-    //TS_U8 *RgbImage = NULL;
+    TS_S32 s32Ret = TS_SUCCESS;
     SAMPLE_VIDEO_ALG_CPM *pCpmParam = (SAMPLE_VIDEO_ALG_CPM *)p;
-    TS_U32  alg_chn_w = pCpmParam->stALgChnSize.width;
-    TS_U32  alg_chn_h = pCpmParam->stALgChnSize.hight;
-    TS_U32  alg_chn_h_ex = pCpmParam->stALgChnSize.hight_ex;
-    TS_S32  alg_rgb_size = (alg_chn_h + alg_chn_h_ex) * alg_chn_w * ALG_RGBA_CHN;
-    ALG_IMAGE_S AlgoFaceIn;
-    memset(&AlgoFaceIn, 0, sizeof(ALG_IMAGE_S));
-    ALG_IMAGE_S AlgoSrcFaceIn;
-    memset(&AlgoSrcFaceIn, 0, sizeof(ALG_IMAGE_S));
+    SAMPLE_ALG_INSTANCE_S *pcurAlgInst;
 
-	//struct timeval TimeoutVal;
-	//TS_UL	runtime = 0;n
-
-
-	//SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm;
-
-	TS_S32 i;
-	SAMPLE_ALG_INSTANCE_S *pcurAlgInst;
-
-    TS_U8 *YuvImage = NULL;
-	TS_U8 *YuvBigImage = NULL;
-    TS_S32 algo_yuv_size = alg_chn_w * alg_chn_h * 3/2;//alg_chn_w * alg_chn_h * 3 / 2; 拼接双目
-
-    s32Ret = TS_MPI_SYS_MmzAlloc_Cached(&(AlgoFaceIn.pDataPhy), &(AlgoFaceIn.pData), NULL, NULL, alg_rgb_size);
-	if(0 != s32Ret) {
-		SAMPLE_PRT("TS_MPI_SYS_MmzAlloc_Cached error\n");
-		return TS_NULL;
-	}
-
-
-    YuvImage = (TS_U8 *)malloc(algo_yuv_size);
-	if(YuvImage == NULL){
-		printf("buffer malloc error!\n");
-		goto exit;
-	}
-
-	memset(AlgoFaceIn.pData, 114, alg_rgb_size);
-
-	/*FILE* pfInput = fopen("/tmp/nfs/IMG_3567.nn.int8.bin", "rb");
-	if(!pfInput){
-		SAMPLE_PRT("xxn_xxn file open failed!\n");
-	}
-	else{
-		SAMPLE_PRT("xxn_xxn file open successed!\n");
-	}
-	if(pfInput){
-		fread((TS_U8 *)RgbImage, 1, 640 * 3 * 384, pfInput);
-		SAMPLE_PRT("xxn_xxn file read read read!\n");
-	}*/
-    long t0 ,t1;
     prctl(PR_SET_NAME, (unsigned long)"tsalg_proc_thread", 0, 0, 0);
-    SAMPLE_PRT("SAMPLE_COMM_ALG_FACE_Process run[%d]\n", s32Ret);
-    while (pCpmParam->bAlgProcRunFlag) {
-        if (pCpmParam->enAlgProcBufStatus != BUFFER_STATUS_ALG_PROCESS){
+    SAMPLE_PRT("SAMPLE_COMM_ALG_FACE_Process run\n");
+
+    long t0, t1, t2, t3;
+    static TS_S32 Process_frame_count = 0;
+
+    while (pCpmParam->bAlgProcRunFlag)
+    {
+        if (pCpmParam->enAlgProcBufStatus != BUFFER_STATUS_ALG_PROCESS)
+        {
             goto algo_next_loop1;
         }
-        #if QI_LOG
-        t0 = getSystemTime();
-        printf("=======================t0===============================%llu\n",t0);
-        #endif
-        /*3.yuv to rgb  */
-        
-        //if(Frame_count % ALG_SKIP_INTERVAL == 0)
-        //{
-        //    goto algo_next_loop;
-        //}
 
-        //sprintf(yuvFile, "./%d_w%d_h%d.yuv", Frame_count, ALG_DETECT_IMAGE_W, ALG_DETECT_IMAGE_H);
-        //SaveYuvImage((const TS_CHAR *)yuvFile, pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0], ALG_DETECT_IMAGE_W, ALG_DETECT_IMAGE_H);
-        //save_algo_yuv(pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0], Frame_count);
-        Frame_count++;
-			//save_cnt++;
-#if 0
+       // t0 = getSystemTime();
+        pthread_mutex_lock(&g_AlgoFaceInLock);
+        ALG_IMAGE_S localAlgoFaceIn = AlgoFaceIn;
+        ALG_IMAGE_S localAlgoSrcFaceIn = AlgoSrcFaceIn;
+        pthread_mutex_unlock(&g_AlgoFaceInLock);
+       // t1 = getSystemTime();
 
-        if(Frame_count%4 ==0){
-            memcpy(YuvImage, yuv31_w640_h360,  ALG_DETECT_IMAGE_W * ALG_DETECT_IMAGE_H*3/2);
-        }
-        else if(Frame_count%4 ==1){
-            memcpy(YuvImage, yuv32_w640_h360,  ALG_DETECT_IMAGE_W * ALG_DETECT_IMAGE_H*3/2);
-        }
-        else if(Frame_count%4 ==2){
-            memcpy(YuvImage, yuv48_w640_h360,  ALG_DETECT_IMAGE_W * ALG_DETECT_IMAGE_H*3/2);
-        }
-        else if(Frame_count%4 ==3){
-            memcpy(YuvImage, yuv49_w640_h360,  ALG_DETECT_IMAGE_W * ALG_DETECT_IMAGE_H*3/2);
-        }
-
-
-		SAMPLE_ALG_Yuv2Rgb(YuvImage,
-                           YuvImage+ ALG_DETECT_IMAGE_W * ALG_DETECT_IMAGE_H,
-			             (((TS_U8*)AlgoFaceIn.pData) + ALG_RGBA_CHN * 12 * ALG_DETECT_IMAGE_W), ALG_DETECT_IMAGE_W, ALG_DETECT_IMAGE_H,
-                         ALG_DETECT_IMAGE_W, ALG_DETECT_IMAGE_H, ALG_RGB_TYPE_RGBA32);
-
+        for (int i = 0; i < pCpmParam->u32ActualAlgNum; ++i)
         {
-            char cfileName[40] = {0};
-            if(Frame_count <=16) {
-                sprintf(cfileName, "Frame_count_%d_%d.bin", Frame_count%4, Frame_count);
-                FILE *pSaveFile = fopen(cfileName, "wb");
-                if(pSaveFile) {
-                    fwrite((TS_U8*)AlgoFaceIn.pData, ALG_RGBA_CHN * 384 * ALG_DETECT_IMAGE_W, 1, pSaveFile);
-                    fclose(pSaveFile);
-                    printf("++++++++++++++++save file+++++++++++++++++\n");
-                }
-            }
-        }
-#else
-        SAMPLE_ALG_Yuv2Rgb((TS_U8*)(uintptr_t)(pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0]),
-                        (TS_U8*)(uintptr_t)(pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0]) + alg_chn_w * alg_chn_h,
-                        (((TS_U8*)(uintptr_t)AlgoFaceIn.pData) + ALG_RGBA_CHN * alg_chn_h_ex/2 * alg_chn_w), alg_chn_w, alg_chn_h,
-                        alg_chn_w, alg_chn_h, ALG_RGB_TYPE_RGBA32);
-
-
-#endif
-
-		AlgoFaceIn.s32H = alg_chn_h + alg_chn_h_ex;
-	    AlgoFaceIn.s32W = alg_chn_w;
-		AlgoFaceIn.s32C = ALG_RGBA_CHN;
-        //AlgoFaceIn.pData = RgbImage;
-		//AlgoFaceIn.pDataPhy = u64PhyAddr;
-
-        /* 4.face detect */
-        YuvBigImage = (TS_U8*)(uintptr_t)pCpmParam->stAlgSrcBuffer.stVFrame.u64VirAddr[0];
-
-        AlgoSrcFaceIn.s32H = pCpmParam->u32Height;
-        AlgoSrcFaceIn.s32W = pCpmParam->u32Width;
-        AlgoSrcFaceIn.s32C = 1;
-
-        AlgoSrcFaceIn.pData = (void*)(uintptr_t)YuvBigImage; //虚拟地址
-        AlgoSrcFaceIn.pDataPhy = pCpmParam->stAlgSrcBuffer.stVFrame.u64PhyAddr[0];
-
-        s32Ret = TS_MPI_SYS_MmzFlushCache(AlgoFaceIn.pDataPhy, AlgoFaceIn.pData, alg_rgb_size);
-        if (0 != s32Ret)
-        {
-            SAMPLE_PRT("###error SAMPLE_CPM_ALG_Process, TS_MPI_SYS_MmzFlushcache\n");
-        }
-
-		//if (TS_TRUE == g_algo_save_enable){
-		//	SavePicData2File(AlgoFaceIn.pData, (ALG_DETECT_IMAGE_H + ALG_IMAGE_H_PADDING) * ALG_DETECT_IMAGE_W * ALG_RGB_CHN);
-		//}
-
-		for(i = 0; i < pCpmParam->u32ActualAlgNum; ++i)
-		{
-			pcurAlgInst = pCpmParam->pstAlgInstList[i];
-            if(pcurAlgInst->pf_Process != NULL){
-                //pthread_mutex_lock(&(pCpmParam->stAlgProcLock));
-                s32Ret = pcurAlgInst->pf_Process(pcurAlgInst, &AlgoSrcFaceIn, &AlgoFaceIn, &(pCpmParam->stAlgResult));
-                if(TS_SUCCESS != s32Ret) {
+            pcurAlgInst = pCpmParam->pstAlgInstList[i];
+            if (pcurAlgInst->pf_Process != NULL)
+            {
+                s32Ret = pcurAlgInst->pf_Process(pcurAlgInst, &localAlgoSrcFaceIn, &localAlgoFaceIn, &(pCpmParam->stAlgResult));
+                if (TS_SUCCESS != s32Ret)
+                {
                     SAMPLE_PRT("TS_ALGO_Process error\n");
-                    //pthread_mutex_unlock(&(pCpmParam->stAlgProcLock));
-                    goto exit_process;
+                    return TS_NULL;
                 }
-                //pthread_mutex_unlock(&(pCpmParam->stAlgProcLock));
             }
-		}
+        }
+       // t2 = getSystemTime();
 
         VB_BLK tmp_vb_blk = TS_MPI_VB_PhysAddr2Handle(pCpmParam->stAlgBuffer.stVFrame.u64PhyAddr[0]);
         s32Ret = TS_MPI_VB_ReleaseBlock(tmp_vb_blk);
-        if(s32Ret != 0) {
-                SAMPLE_PRT("TS_MPI_VB_ReleaseBlock error\n");
+        if (s32Ret != 0)
+        {
+            SAMPLE_PRT("TS_MPI_VB_ReleaseBlock error\n");
         }
-        //SAMPLE_PRT("TS_MPI_VB_ReleaseBlock success=0x%x; 0x%x\n", tmp_vb_blk, pCpmParam->stAlgBuffer.stVFrame.u64PhyAddr[0]);
 
         pthread_mutex_lock(&(pCpmParam->stAlgProcLock));
         memcpy((TS_VOID *)&(pCpmParam->stTmpResult), (TS_VOID *)&(pCpmParam->stAlgResult), sizeof(SAMPLE_ALG_RESULT_S));
         pCpmParam->bResultUpdate = TS_TRUE;
         pthread_mutex_unlock(&(pCpmParam->stAlgProcLock));
+       // t3 = getSystemTime();
 
         pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_FILL;
-        #if QI_LOG
-        t1 = getSystemTime();
-        printf("=======================t1===============================%llu\n",t1);
-        printf("=======================t1-t0===============================%d\n",t1-t0);
-        #endif
-        continue;
 
+        Process_frame_count++;
+        // printf("[Process] Frame %d: CopyData=%ldms, AlgoProcess=%ldms, SaveResult=%ldms, Total=%ldms\n",
+        //        Process_frame_count, t1 - t0, t2 - t1, t3 - t2, t3 - t0);
+        
+        //continue;
 
 algo_next_loop1:
         usleep(1000 * 25);
-	}
+    }
 
+#endif
+    return TS_NULL;
+}
+static TS_VOID *SAMPLE_CPM_ALG_Process1(void *p)
+{
+#if USE_CPM
+    TS_S32 s32Ret = TS_SUCCESS;
+    static TS_S32 Frame_count = 0;
+    SAMPLE_VIDEO_ALG_CPM *pCpmParam = (SAMPLE_VIDEO_ALG_CPM *)p;
+
+    TS_U8 *YuvImage = NULL;
+    TS_U8 *frame_concat = NULL;
+    int single_frame_size = SINGLE_WIDTH * SINGLE_HEIGHT * 3 / 2;
+    int concat_frame_size = single_frame_size * 2;
+
+    YuvImage = (TS_U8 *)malloc(ALGO_YUV_SIZE);
+    if (YuvImage == NULL)
+    {
+        printf("buffer malloc error!\n");
+        return TS_NULL;
+    }
+
+    frame_concat = (TS_U8 *)malloc(concat_frame_size);
+    if (frame_concat == NULL)
+    {
+        printf("frame_concat malloc error!\n");
+        free(YuvImage);
+        return TS_NULL;
+    }
+
+    VIDEO_FRAME_INFO_S stFrameInfo = {0};
+
+    s32Ret = TS_MPI_VPSS_EnableChn(VI_DEV_ID, VI_CHN_ID);
+    if (s32Ret != TS_SUCCESS)
+    {
+        printf("TS_MPI_VPSS_EnableChn failed! ret = %d\n", s32Ret);
+    }
+    
+    prctl(PR_SET_NAME, (unsigned long)"tsalg_proc_thread1", 0, 0, 0);
+    SAMPLE_PRT("SAMPLE_COMM_ALG_FACE_Process1 run[%d]\n", s32Ret);
+
+    long t0, t1, t2, t3, t4, t5;
+
+    while (pCpmParam->bAlgProcRunFlag)
+    {
+        if (pCpmParam->enAlgProcBufStatus != BUFFER_STATUS_ALG_PROCESS)
+        {
+            goto algo_next_loop1;
+        }
+
+        //t0 = getSystemTime();
+        s32Ret = TS_MPI_VPSS_GetChnFrame(VI_DEV_ID, VI_CHN_ID, &stFrameInfo, VI_GET_FRAME_TIMEOUT);
+        if (s32Ret != TS_SUCCESS)
+        {
+            printf("TS_MPI_VPSS_GetChnFrame failed! ret = %d, skip this frame\n", s32Ret);
+            usleep(CPM_ALG_CYCLE * 1000);
+            continue;
+        }
+        //t1 = getSystemTime();
+
+        int ret = TS_NV12_Vertical_Concat_Correct(pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0], stFrameInfo.stVFrame.u64VirAddr[0], (uintptr_t)frame_concat, SINGLE_WIDTH, SINGLE_HEIGHT, DST_WIDTH, DST_HEIGHT);
+        ret = TS_NV12_Scale_Ex((uintptr_t)frame_concat, SINGLE_WIDTH, SINGLE_HEIGHT * 2, (uintptr_t)YuvImage, DST_WIDTH, DST_HEIGHT, 1);
+        //t2 = getSystemTime();
+
+        s32Ret = TS_MPI_VPSS_ReleaseChnFrame(VI_DEV_ID, VI_CHN_ID, &stFrameInfo);
+        if (s32Ret != TS_SUCCESS)
+        {
+            printf("TS_MPI_VPSS_ReleaseChnFrame failed! ret = %d\n", s32Ret);
+        }
+
+        SAMPLE_ALG_Yuv2Rgb((uintptr_t)YuvImage,
+                           (uintptr_t)YuvImage + DST_WIDTH * DST_HEIGHT,
+                           (uintptr_t)AlgoFaceIn.pData, DST_WIDTH, DST_HEIGHT,
+                           DST_WIDTH, DST_HEIGHT, ALG_RGB_TYPE_RGBA32);
+       //t3 = getSystemTime();
+
+        s32Ret = TS_MPI_SYS_MmzFlushCache(AlgoFaceIn.pDataPhy, AlgoFaceIn.pData, ALG_RGB_SIZE);
+        if (0 != s32Ret)
+        {
+            SAMPLE_PRT("###error SAMPLE_CPM_ALG_Process1, TS_MPI_SYS_MmzFlushcache\n");
+        }
+        //t4 = getSystemTime();
+
+        pthread_mutex_lock(&g_AlgoFaceInLock);
+        Frame_count++;
+        AlgoFaceIn.s32H = DST_HEIGHT;
+        AlgoFaceIn.s32W = DST_WIDTH;
+        AlgoFaceIn.s32C = ALG_RGBA_CHN;
+
+        AlgoSrcFaceIn.s32H = DST_HEIGHT;
+        AlgoSrcFaceIn.s32W = DST_WIDTH;
+        AlgoSrcFaceIn.s32C = 1;
+
+        AlgoSrcFaceIn.pData = (void *)AlgoFaceIn.pData;
+        AlgoSrcFaceIn.pDataPhy = pCpmParam->stAlgSrcBuffer.stVFrame.u64PhyAddr[0];
+        pthread_mutex_unlock(&g_AlgoFaceInLock);
+        // t5 = getSystemTime();
+
+        // printf("[Process1] Frame %d: GetFrame=%ldms, Process=%ldms, Yuv2Rgb=%ldms, Flush=%ldms, Lock=%ldms, Total=%ldms\n",
+        //        Frame_count, t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t5 - t0);
+
+        //continue;
+
+    algo_next_loop1:
+        usleep(1000 * 50);  // 增加到50ms，减少CPU占用
+    }
 
 exit_process:
-    if (NULL != YuvImage) {
+    if (NULL != YuvImage)
+    {
         free(YuvImage);
         YuvImage = NULL;
     }
 
-exit:
-    s32Ret = TS_MPI_SYS_MmzFree(AlgoFaceIn.pDataPhy, AlgoFaceIn.pData);
-    if(s32Ret != 0) {
-        SAMPLE_PRT("##### TS_MPI_SYS_MmzFree error\n");
+    if (NULL != frame_concat)
+    {
+        free(frame_concat);
+        frame_concat = NULL;
     }
+
 #endif
     return TS_NULL;
 }
 
-TS_S32  SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle)
+TS_S32 SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle)
 {
-    SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm;
+    SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm[0];
 
     SAMPLE_PRT("cpm init \n");
 
-	gstSampleVideoAlgCpm.u32ActualAlgNum = SAMPLE_ALG_Init_Instances(pCpmParam->pstAlgInstList, pCpmParam->enAlgMask, pCpmParam->u32AlgNum);
+    gstSampleVideoAlgCpm[0].u32ActualAlgNum = SAMPLE_ALG_Init_Instances(pCpmParam->pstAlgInstList, pCpmParam->enAlgMask, pCpmParam->u32AlgNum);
 
-    printf("实际支持算法数量gstSampleVideoAlgCpm.u32ActualAlgNum:%d\n",gstSampleVideoAlgCpm.u32ActualAlgNum);
-    if (0 == gstSampleVideoAlgCpm.u32ActualAlgNum){
+    if (0 == gstSampleVideoAlgCpm[0].u32ActualAlgNum)
+    {
         ALG_LOGE("no one alg register\n");
-        //return TS_FAILURE;
+        // return TS_FAILURE;
     }
 
-	memset((TS_VOID*)&(pCpmParam->stAlgSrcBuffer), 0, sizeof(VIDEO_FRAME_INFO_S));
-    memset((TS_VOID*)&(pCpmParam->stAlgBuffer), 0, sizeof(VIDEO_FRAME_INFO_S));
+    memset((TS_VOID *)&(pCpmParam->stAlgSrcBuffer), 0, sizeof(VIDEO_FRAME_INFO_S));
+    memset((TS_VOID *)&(pCpmParam->stAlgBuffer), 0, sizeof(VIDEO_FRAME_INFO_S));
 
-    memset((TS_VOID*)&(pCpmParam->stAlgResult), 0 , sizeof(SAMPLE_ALG_RESULT_S));
-    memset((TS_VOID*)&(pCpmParam->stTmpResult), 0 , sizeof(SAMPLE_ALG_RESULT_S));
+    memset((TS_VOID *)&(pCpmParam->stAlgResult), 0, sizeof(SAMPLE_ALG_RESULT_S));
+    memset((TS_VOID *)&(pCpmParam->stTmpResult), 0, sizeof(SAMPLE_ALG_RESULT_S));
 
-	pCpmParam->bAlgProcRunFlag = TS_TRUE;
-	pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_INIT;
+    pCpmParam->bAlgProcRunFlag = TS_TRUE;
+    pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_INIT;
     pCpmParam->bResultUpdate = TS_FALSE;
-	//pCpmParam->stAlgProcLock = PTHREAD_MUTEX_INITIALIZER;
+    // pCpmParam->stAlgProcLock = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_init(&(pCpmParam->stAlgProcLock), NULL);
 
+    pthread_mutex_lock(&g_AlgoFaceInLock);
+    memset(&AlgoFaceIn, 0, sizeof(ALG_IMAGE_S));
+    memset(&AlgoSrcFaceIn, 0, sizeof(ALG_IMAGE_S));
+    TS_S32 s32Ret = TS_MPI_SYS_MmzAlloc_Cached(&(AlgoFaceIn.pDataPhy), &(AlgoFaceIn.pData), NULL, NULL, ALG_RGB_SIZE);
+    if (0 != s32Ret)
+    {
+        SAMPLE_PRT("TS_MPI_SYS_MmzAlloc_Cached error\n");
+        pthread_mutex_unlock(&g_AlgoFaceInLock);
+        return TS_FAILURE;
+    }
+    memset(AlgoFaceIn.pData, 114, ALG_RGB_SIZE);
+    pthread_mutex_unlock(&g_AlgoFaceInLock);
+
+    pthread_create(&(pCpmParam->stAlgProcPid1), 0, SAMPLE_CPM_ALG_Process1, (TS_VOID *)pCpmParam);
     pthread_create(&(pCpmParam->stAlgProcPid), 0, SAMPLE_CPM_ALG_Process, (TS_VOID *)pCpmParam);
 
     return TS_SUCCESS;
@@ -665,74 +619,94 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle)
 
 TS_VOID SAMPLE_ALG_CPM_HANDLE_Exit(TS_VOID *pHandle)
 {
-    SAMPLE_VIDEO_ALG_CPM * pCpmParam = &gstSampleVideoAlgCpm;
-	TS_S32  i;
+    SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm;
+    TS_S32 i;
 
     pCpmParam->bAlgProcRunFlag = TS_FALSE;
+    
     if (pCpmParam->stAlgProcPid > 0)
     {
         pthread_join(pCpmParam->stAlgProcPid, 0);
         pCpmParam->stAlgProcPid = 0;
     }
+    
+    if (pCpmParam->stAlgProcPid1 > 0)
+    {
+        pthread_join(pCpmParam->stAlgProcPid1, 0);
+        pCpmParam->stAlgProcPid1 = 0;
+    }
 
-	for (i=0; i< pCpmParam->u32AlgNum; i++){
-		if (pCpmParam->pstAlgInstList[i] != NULL) {
-			if (pCpmParam->pstAlgInstList[i]->pf_Exit != NULL) {
-					pCpmParam->pstAlgInstList[i]->pf_Exit(pCpmParam->pstAlgInstList[i]);
-			}
-		}
-	}
+    for (i = 0; i < pCpmParam->u32AlgNum; i++)
+    {
+        if (pCpmParam->pstAlgInstList[i] != NULL)
+        {
+            if (pCpmParam->pstAlgInstList[i]->pf_Exit != NULL)
+            {
+                pCpmParam->pstAlgInstList[i]->pf_Exit(pCpmParam->pstAlgInstList[i]);
+            }
+        }
+    }
+
+    pthread_mutex_lock(&g_AlgoFaceInLock);
+    TS_S32 s32Ret = TS_MPI_SYS_MmzFree(AlgoFaceIn.pDataPhy, AlgoFaceIn.pData);
+    if (s32Ret != 0)
+    {
+        SAMPLE_PRT("##### TS_MPI_SYS_MmzFree error\n");
+    }
+    pthread_mutex_unlock(&g_AlgoFaceInLock);
+
+    pthread_mutex_destroy(&g_AlgoFaceInLock);
 
     return;
 }
 
-TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **out)
+TS_S32 SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **out)
 {
 
 #if USE_CPM
 
-    SAMPLE_VIDEO_ALG_CPM * pCpmParam = &gstSampleVideoAlgCpm;
-
-	CHECK_NULL_PTR(in);
+    VIDEO_FRAME_INFO_S *inPipeFrameVenc = in[0];
+    SAMPLE_VIDEO_ALG_CPM *pCpmParam;
+    
+   
+    pCpmParam = &gstSampleVideoAlgCpm[0];
+    CHECK_NULL_PTR(in);
     CHECK_NULL_PTR(*in);
     CHECK_NULL_PTR(out);
     CHECK_NULL_PTR(*out);
-	VIDEO_FRAME_INFO_S *inPipesrcFrameAlgo = in[0];
+    VIDEO_FRAME_INFO_S *inPipesrcFrameAlgo = in[0];
     VIDEO_FRAME_INFO_S *inPipeFrameAlgo = in[1];
     VIDEO_FRAME_INFO_S *outChnFrameVenc = out[0];
-	static int count = 0;
+    static int count = 0;
     static int default_cnt = 0;
 
-
-    
     switch (pCpmParam->enAlgProcBufStatus)
     {
-        case BUFFER_STATUS_INIT:
-            {
-                pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_FILL;
-            }
-            break;
-        case BUFFER_STATUS_FILL:
-            {
-                memcpy(&(pCpmParam->stAlgSrcBuffer), inPipesrcFrameAlgo, sizeof(VIDEO_FRAME_INFO_S));
-                //TS_MPI_VB_DupBlock(inPipesrcFrameAlgo->u32PoolId, inPipesrcFrameAlgo->stVFrame.u64PhyAddr[0]);
+    case BUFFER_STATUS_INIT:
+    {
+        pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_FILL;
+    }
+    break;
+    case BUFFER_STATUS_FILL:
+    {
+        memcpy(&(pCpmParam->stAlgSrcBuffer), inPipesrcFrameAlgo, sizeof(VIDEO_FRAME_INFO_S));
+        // TS_MPI_VB_DupBlock(inPipesrcFrameAlgo->u32PoolId, inPipesrcFrameAlgo->stVFrame.u64PhyAddr[0]);
 
-                memcpy(&(pCpmParam->stAlgBuffer), inPipeFrameAlgo, sizeof(VIDEO_FRAME_INFO_S));
-                TS_MPI_VB_DupBlock_UID(inPipeFrameAlgo->u32PoolId, inPipeFrameAlgo->stVFrame.u64PhyAddr[0], VB_UID_USER);
+        memcpy(&(pCpmParam->stAlgBuffer), inPipeFrameAlgo, sizeof(VIDEO_FRAME_INFO_S));
+        TS_MPI_VB_DupBlock_UID(inPipeFrameAlgo->u32PoolId, inPipeFrameAlgo->stVFrame.u64PhyAddr[0], VB_UID_USER);
 
-                count++;
-                pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_ALG_PROCESS;
-
-            }
-            break;
-        case BUFFER_STATUS_ALG_BYPASS:
-            {
-                memcpy(outChnFrameVenc, inPipeFrameAlgo,sizeof(VIDEO_FRAME_INFO_S));
-                return TS_SUCCESS;
-            }
-        default:
-            default_cnt++;
-            break;
+        count++;
+        pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_ALG_PROCESS;
+    }
+    break;
+    case BUFFER_STATUS_ALG_BYPASS:
+    {
+        memcpy(outChnFrameVenc, inPipeFrameAlgo, sizeof(VIDEO_FRAME_INFO_S));
+        return TS_SUCCESS;
+    }
+    default:
+        default_cnt++;
+        break;
     }
 
 
@@ -749,7 +723,10 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **
         {
             VIDEO_FRAME_INFO_S *inPipeFrameVenc = in[0];
             unsigned char *YuvBuf = (unsigned char *)(TS_UL)(inPipeFrameVenc->stVFrame.u64VirAddr[0]);
-            SAMPLE_ALG_Result_Proc(YuvBuf, &pCpmParam->stTmpResult);
+            
+            // 根据 pCpmParam 确定 CPM Group ID
+            //TS_U32 CPMGrp = (pCpmParam == &gstSampleVideoAlgCpm[0]) ? 0 : 1;
+            SAMPLE_ALG_Result_Proc(YuvBuf, &pCpmParam->stTmpResult, 0);
 
             TS_MPI_SYS_MflushCache(inPipeFrameVenc->stVFrame.u64PhyAddr[0],
                                    (TS_VOID *)(uintptr_t)(inPipeFrameVenc->stVFrame.u64VirAddr[0]),
@@ -766,40 +743,36 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **
 #endif
 
     memcpy(out[0], in[0], sizeof(VIDEO_FRAME_INFO_S));
-    //memcpy(out[0], in[0], sizeof(VIDEO_FRAME_INFO_S));
-	//memcpy(out[1], in[0], sizeof(VIDEO_FRAME_INFO_S));//hxl
     VIDEO_FRAME_INFO_S *bufinfo = (VIDEO_FRAME_INFO_S *)in[0];
 #if SDK_VERSON_030
 #else
 	if(bufinfo)
 		TS_MPI_VB_DupBlock_UID(bufinfo->u32PoolId, bufinfo->stVFrame.u64PhyAddr[0], VB_UID_CPM);
 #endif
-  
+
     return TS_SUCCESS;
 }
-
 TS_S32 SAMPLE_ALG_CPM_HANDLE_SetParam(TS_VOID *pHandle, TS_VOID *pParam)
 {
-	printf("cpm set param \n");
+    printf("cpm set param \n");
     return TS_SUCCESS;
 }
 
-TS_S32  SAMPLE_ALG_CPM_HANDLE_GetParam(TS_VOID *pHandle, TS_VOID *pParam)
+TS_S32 SAMPLE_ALG_CPM_HANDLE_GetParam(TS_VOID *pHandle, TS_VOID *pParam)
 {
-	printf("cpm get param \n");
+    printf("cpm get param \n");
     return TS_SUCCESS;
-
 }
 
-TS_S32  SAMPLE_ALG_CPM_HANDLE_GetResult(TS_VOID *pHandle, TS_VOID *pResult)
+TS_S32 SAMPLE_ALG_CPM_HANDLE_GetResult(TS_VOID *pHandle, TS_VOID *pResult)
 {
-	printf("cpm get result \n");
-	return TS_SUCCESS;
+    printf("cpm get result \n");
+    return TS_SUCCESS;
 }
 
-TS_S32  SAMPLE_ALG_CPM_HANDLE_ReleaseResult(TS_VOID *pHandle, TS_VOID *pResult)
+TS_S32 SAMPLE_ALG_CPM_HANDLE_ReleaseResult(TS_VOID *pHandle, TS_VOID *pResult)
 {
 
-	printf("cpm release result \n");
-	return TS_SUCCESS;
+    printf("cpm release result \n");
+    return TS_SUCCESS;
 }

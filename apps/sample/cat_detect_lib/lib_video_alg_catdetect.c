@@ -12,9 +12,11 @@ extern "C" {
 #include "cJSON.h"
 #include "arrr_diff.h"
 #include "file_sync.h"
+#include "qi_nv12_yuv.h"
 #define TEST_MODE1 0 //打开这个 则保存640码流
 #define TEST_MODE2 0 //打开这个 则读取输入文件为视频流
 #define TEST_MODE3 0 //打开这个 则不允许猫脸检测 只保存640码流
+#define TEST_MODE4 0 //打开这个 保存输入文件
 static int is_food_on = 0;
 
 #if TEST_MODE1
@@ -26,10 +28,15 @@ char mode1_name_yuv[128] = {0};
 #endif
 
 #if TEST_MODE2
+// char mode2_name[128] = {0};
+// #define MODE2_NAME_PRE "/media/mmcblk0p1/testfile/test_mode2/input_mode2.rgba"
+// char mode2_name_yuv[128] = {0};
+// #define MODE2_NAME_PRE_YUV "/media/mmcblk0p1/testfile/test_mode2/input_mode2.yuv"
+
 char mode2_name[128] = {0};
-#define MODE2_NAME_PRE "/media/mmcblk0p1/testfile/test_mode2/input_mode2.rgba"
+#define MODE2_NAME_PRE "/mnt/sda0/weipai/merge_img.rgba"
 char mode2_name_yuv[128] = {0};
-#define MODE2_NAME_PRE_YUV "/media/mmcblk0p1/testfile/test_mode2/input_mode2.yuv"
+#define MODE2_NAME_PRE_YUV "/mnt/sda0/weipai/input_mode2.yuv"
 
 #endif
 #if 1
@@ -222,17 +229,98 @@ init_exit:
     return s32Ret;
 }
 
+int Alarm_time_static11()
+{
+	struct tm *tm_ptr;
+	struct timeval tv;
+	char str[25] = { 0 };
+	;
+	char str_dada[100] = { 0 };
+	gettimeofday(&tv, NULL);
+
+	time_t now = time(NULL);
+	tm_ptr = localtime(&now);
+	//printf("Year: %d\n", tm_ptr->tm_year + 1900);
+	// printf("Month: %d\n", tm_ptr->tm_mon + 1);
+	// printf("Day: %d\n", tm_ptr->tm_mday);
+	// printf("Hour: %d\n", tm_ptr->tm_hour);
+	// printf("Minute: %d\n", tm_ptr->tm_min);
+	// printf("Second: %d\n", tm_ptr->tm_sec);
+	// printf("Millisecond: %d\n", tv.tv_usec / 1000);
+	// strcat(timedata,itoa(tm_ptr->tm_year + 1900));
+	// strcat(timedata,itoa(tm_ptr->tm_mon + 1));
+	// strcat(timedata,itoa(tm_ptr->tm_mday));
+	// strcat(timedata,itoa(tm_ptr->tm_hour));
+	// strcat(timedata,itoa(tm_ptr->tm_min));
+	// strcat(timedata,itoa(tm_ptr->tm_sec));
+	// strcat(timedata,itoa(tv.tv_usec / 1000));
+
+	sprintf(str, "%d", tm_ptr->tm_year + 1900);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "年");
+	sprintf(str, "%d", tm_ptr->tm_mon + 1);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "月");
+
+	sprintf(str, "%d", tm_ptr->tm_mday);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "日");
+	sprintf(str, "%d", tm_ptr->tm_hour);
+	strcat(str_dada, str);
+	strcat(str_dada, "时");
+
+	sprintf(str, "%d", tm_ptr->tm_min);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "分");
+
+	sprintf(str, "%d", tm_ptr->tm_sec);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "秒");
+
+	sprintf(str, "%d", tv.tv_usec / 1000);
+
+	strcat(str_dada, str);
+	strcat(str_dada, "毫秒");
+
+	//memcpy(timedata,str_dada,sizeof(str_dada));
+	//strcpy(timedata,str_dada);
+	printf("===VIDEO_ALG_CatDetect_Proc str_dada====:%s\n", str_dada);
+	//timedata = str_dada;
+	return 0;
+}
+
+unsigned long long getSystemTime1()
+{
+	//struct timeval tv1;
+	//gettimeofday(&tv1, NULL);
+	//return (unsigned long long)(tv1.tv_sec * 1000LL) + (tv1.tv_usec / 1000);
+	unsigned long long int pts = 0;
+	struct timeval tv1;
+	gettimeofday(&tv1, NULL);
+	pts = (unsigned long long int)tv1.tv_sec * 1000 + (tv1.tv_usec / 1000);
+	return (long)pts;
+}
+
+
+
 TS_S32 VIDEO_ALG_CatDetect_Proc(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE_S *pImageDet, ALG_CatDetect_DET_RESULT_S *pResult)
 {
+	//printf("######VIDEO_ALG_CatDetect_Proc start#######\n");
 	TS_S32 s32Ret = TS_SUCCESS;
-
+	long t0 ,t1,t2,t3,t4,t5,t6;
+	//t5 = getSystemTime1();
     SAMPLE_ALG_INSTANCE_S* pInst = (SAMPLE_ALG_INSTANCE_S*)pHandle;
 	if (!pHandle|| !pImageDet || !pResult) {
 		ALG_LOGE("VIDEO_ALG_CatDetect_Proc param is null\n");
 		return TS_FAILURE;
 	}
 
-
+	
 	//后续修改输入 从这里修改输入
 	#if TEST_MODE2
 		//int file_num = atoi(out_file_num);
@@ -243,26 +331,26 @@ TS_S32 VIDEO_ALG_CatDetect_Proc(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE
 		if(set_name_flag)
 		{
 			sprintf(mode2_name,"%s",MODE2_NAME_PRE);
-			sprintf(mode2_name_yuv,"%s",MODE2_NAME_PRE_YUV);
+			//sprintf(mode2_name_yuv,"%s",MODE2_NAME_PRE_YUV);
 			set_name_flag = 0;
 		}
 		FILE* pOut;
 		FILE* pOut_yuv;
         pOut = fopen(mode2_name, "r");
-		pOut_yuv = fopen(mode2_name_yuv, "r");
+		//pOut_yuv = fopen(mode2_name_yuv, "r");
 		// 改变文件指针位置
 	    if (fseek(pOut, file_count*pImageDet->s32W*4*pImageDet->s32H, SEEK_SET) != 0) {
 	        perror("Failed to seek in file");
 			fseek(pOut, 0, SEEK_SET);
 	    }
-		if (fseek(pOut_yuv, file_count*pImage->s32W*1.5*pImage->s32H, SEEK_SET) != 0) {
-	        perror("Failed to seek in file");
-			fseek(pOut_yuv, 0, SEEK_SET);
-			file_count = 0;
-	       	fclose(pOut);
-			fclose(pOut_yuv);
+		//if (fseek(pOut_yuv, file_count*pImage->s32W*1.5*pImage->s32H, SEEK_SET) != 0) {
+	        //perror("Failed to seek in file");
+			//fseek(pOut_yuv, 0, SEEK_SET);
+			//file_count = 0;
+	       	//fclose(pOut);
+			//fclose(pOut_yuv);
 	        //return TS_FAILURE;
-	    }
+	    //}
 		file_count++;
         //fwrite(pdstData, dst_w*4, dst_h, pOut);//buf max imgae = W*H*4
 		ret = fread(pImageDet->pData,pImageDet->s32W*4, pImageDet->s32H, pOut);
@@ -271,21 +359,41 @@ TS_S32 VIDEO_ALG_CatDetect_Proc(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE
 			printf("I4S_TEST_MODE2 %s ret %ld over!!\n",mode2_name,ret);
 
 		}
-		ret_yuv = fread(pImage->pData,pImage->s32W*1.5, pImage->s32H, pOut_yuv);
-		if(ret < pImageDet->s32H  || ret_yuv < pImage->s32H)
-		{
-			fclose(pOut);
-			fclose(pOut_yuv);
-			file_count = 0;
-			//return TS_FAILURE;
-		}else{
+		// ret_yuv = fread(pImage->pData,pImage->s32W*1.5, pImage->s32H, pOut_yuv);
+		// if(ret < pImageDet->s32H  || ret_yuv < pImage->s32H)
+		// {
+		// 	fclose(pOut);
+		// 	fclose(pOut_yuv);
+		// 	file_count = 0;
+		// 	//return TS_FAILURE;
+		// }else{
         	fclose(pOut);
-			fclose(pOut_yuv);
-		}
+		// 	fclose(pOut_yuv);
+		// }
 		printf("I4S_TEST_MODE2 %s imgDet w:%d h:%d object\n",
             mode2_name, pImageDet->s32W, pImageDet->s32H);
 
 	#endif
+	#if TEST_MODE4
+		
+		char *dir_path = "/mnt/sda0/weipai_1";
+            char filepath[200] = {0};
+            snprintf(filepath, sizeof(filepath) - 1, "%s/%d.rgba", dir_path, Frame_count);
+            printf("***filepath***:%s\n", filepath);
+            // if ((pFile = fopen(filepath, "rb")) == NULL) {
+            FILE *fp1 = NULL;
+            fp1 = fopen(filepath, "w+");
+            fwrite(pImageDet->pData, 1, pImageDet->s32W * (pImageDet->s32H) * 4, fp1);
+            fclose(fp1);
+            Frame_count++;
+            snprintf(filepath, sizeof(filepath) - 1, "%s/%d.img", dir_path, Frame_count);
+            printf("***filepath***:%s\n", filepath);
+            // if ((pFile = fopen(filepath, "rb")) == NULL) {
+            FILE *fp11 = NULL;
+            fp11 = fopen(filepath, "w+");
+            fwrite(pImage->pData, 1, pImage->s32W * (pImage->s32H) * 3, fp11);
+            fclose(fp11);
+#endif
 	//
 
 	//ALG_CatDetect_DET_RESULT_S
@@ -293,14 +401,11 @@ TS_S32 VIDEO_ALG_CatDetect_Proc(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE
 	ALG_CatDetect_DET_RESULT_S *pTmpResult = (ALG_CatDetect_DET_RESULT_S *)pResult;
 	//SAMPLE_ALG_RESULT_S *pCurResult = (SAMPLE_ALG_RESULT_S *)pResult;
     	//ALG_CatDetect_DET_RESULT_S *pTmpResult = &(pCurResult->gstAlgCatdetResult);
+	
 	s32Ret = TS_ALG_BodyDetect_Process(pInst->pHandle, pImageDet, pTmpResult);
 	if (0 != s32Ret) {
 		ALG_LOGE("TS_ALG_BodyDetect_Process error\n");
 	}
-
-//	printf("TS_ALG_BodyDetect_Process %d imgDet w:%d h:%d object\n",
-  //          pTmpResult->u32ObjNum, pImageDet->s32W, pImageDet->s32H);
-
 	//pImageDet 已经是图片了，从这里保存
 #if TEST_MODE1
 		static int set_name_flag_mode1 = 1;
@@ -363,46 +468,59 @@ TS_S32 VIDEO_ALG_CatDetect_Proc(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE
         rect.top = pTmpResult->stBox[i].f32Ymin * pImage->s32H;
         rect.right = pTmpResult->stBox[i].f32Xmax * pImage->s32W;
         rect.bottom = pTmpResult->stBox[i].f32Ymax * pImage->s32H;
-		if(pTmpResult->stBox[i].class_id != ALG_CAT_CLASS_ID_FOOD){
-			strcpy(pTmpResult->stBox[i].nameid,"0");
-			char ids[64];
-			//printf("resize2 srcImg->s32W=%d,srcImg->s32H=%d\n",pImage->s32W,pImage->s32H);
-			printf("=======取消识别 my_crop_resize_detect========\n");
-			//my_crop_resize_detect(pImage, &rect,ids);//识别  取消识别测试检测时间hxl
-			strncpy(pTmpResult->stBox[i].nameid,ids,sizeof(pTmpResult->stBox[i].nameid));
-#if 0			
-			tmpid = my_crop_resize_detect(pImage, &rect,pTmpResult->stBox[i].id);
-			if(tmpid == 17){
-				strcpy(pTmpResult->stBox[i].id,"");
-			}else{
-				sprintf(pTmpResult->stBox[i].id,"%d",tmpid);
-			}
-#endif
-			//pTmpResult->stBox[i].id = my_crop_resize_detect(pImage, &rect);//+1
-			//pTmpResult->stBox[i].DetectionConf = test_conf_get();
+// 		if(pTmpResult->stBox[i].class_id != ALG_CAT_CLASS_ID_FOOD){
+// 			strcpy(pTmpResult->stBox[i].nameid,"0");
+// 			char ids[64];
+// 			//printf("resize2 srcImg->s32W=%d,srcImg->s32H=%d\n",pImage->s32W,pImage->s32H);
+// 			printf("=======取消识别 my_crop_resize_detect========\n");
+// 			//my_crop_resize_detect(pImage, &rect,ids);//识别  取消识别测试检测时间hxl
+// 			strncpy(pTmpResult->stBox[i].nameid,ids,sizeof(pTmpResult->stBox[i].nameid));
+// #if 0			
+// 			tmpid = my_crop_resize_detect(pImage, &rect,pTmpResult->stBox[i].id);
+// 			if(tmpid == 17){
+// 				strcpy(pTmpResult->stBox[i].id,"");
+// 			}else{
+// 				sprintf(pTmpResult->stBox[i].id,"%d",tmpid);
+// 			}
+// #endif
+// 			//pTmpResult->stBox[i].id = my_crop_resize_detect(pImage, &rect);//+1
+// 			//pTmpResult->stBox[i].DetectionConf = test_conf_get();
 	
-			pTmpResult->stBox[i].MaxSimilarity = get_simi();
-		}else{
-			 //strcpy(pTmpResult->stBox[i].id,"no id");
-			 //pTmpResult->stBox[i].MaxSimilarity = 0;
-			 //pTmpResult->stBox[i].act = 1;
-		}
+// 			pTmpResult->stBox[i].MaxSimilarity = get_simi();
+// 		}else{
+// 			 //strcpy(pTmpResult->stBox[i].id,"no id");
+// 			 //pTmpResult->stBox[i].MaxSimilarity = 0;
+// 			 //pTmpResult->stBox[i].act = 1;
+// 		}
 	}
-	int cat_num;
-	cat_num = pTmpResult->u32ObjNum;	
-	for(int i=0;i<cat_num;i++){
-		if(pTmpResult->stBox[i].class_id == ALG_CAT_CLASS_ID_FOOD){
-			printf("delete food\n");
-			if(i < cat_num - 1){
-				memcpy(&pTmpResult->stBox[i],&pTmpResult->stBox[i+1],(cat_num - 1 -i)*sizeof(ALG_CatDetect_DET_BOX_S));			
-			}
-			i--;
-			cat_num -= 1;	
-		}		
-	}
-
-	pTmpResult->u32ObjNum = cat_num;
+	//int cat_num;
+	//cat_num = pTmpResult->u32ObjNum;	//检测到食物取消食物检测
+	// for(int i=0;i<cat_num;i++)
+	// {
+	// 	if(pTmpResult->stBox[i].class_id == ALG_CAT_CLASS_ID_FOOD)
+	// 	{
+	// 		printf("delete food\n");
+	// 		if(i < cat_num - 1){
+	// 			memcpy(&pTmpResult->stBox[i],&pTmpResult->stBox[i+1],(cat_num - 1 -i)*sizeof(ALG_CatDetect_DET_BOX_S));			
+	// 		}
+	// 		i--;
+	// 		cat_num -= 1;	
+	// 	}		
+	// }
+	 
+	//pTmpResult->u32ObjNum = cat_num;
+	//t3 = getSystemTime1();
+	//printf("=======================TS_ALG_BodyDetect_Process t3===============================%llu\n",t3);
+	//printf("=======================TS_ALG_BodyDetect_Process t3-t0===============================%d\n",t3-t0);
+	//printf("=======================TS_ALG_BodyDetect_Process t3-t1===============================%d\n",t3-t1);
+	
 	set_result(pTmpResult);
+	//  t4 = getSystemTime1();
+
+	//  printf("=======================TS_ALG_BodyDetect_Process t4===============================%llu\n",t4);
+	// // printf("=======================TS_ALG_BodyDetect_Process t4-t3===============================%d\n",t4-t3);
+	//  printf("=======================TS_ALG_BodyDetect_Process t4-t5===============================%d\n",t4-t5);
+	//  printf("=======================TS_ALG_BodyDetect_Process 4-t0===============================%d\n",t4-t0);
 
     return s32Ret;
 }
@@ -708,8 +826,8 @@ int catinfo_cjson_anylx(char * file_content)
 	cJSON *path_item = NULL;
 	cJSON *test_item = NULL;
 	int pic_num = 0;
-	struct catPicInfo*pic_data = (struct catPicInfo*)malloc(sizeof(struct catPicInfo)*25);//MAX_PIC_NUM
-	memset(pic_data,0,sizeof(struct catPicInfo)*25);
+	struct catPicInfo pic_data[25];
+	memset(pic_data,0,sizeof(pic_data));
 	for(int i=0 ;i < num ;i++)
 	{
 		array_item = cJSON_GetArrayItem(item,i);
@@ -727,7 +845,6 @@ int catinfo_cjson_anylx(char * file_content)
 		}
 	}
 	change_catName_info2(pic_data,pic_num,NULL,0);
-	free(pic_data);
 	// 清理
 	cJSON_Delete(json);
 	free(file_content);
@@ -775,6 +892,27 @@ TS_S32 CatSetPicDir(TS_CHAR*path)
 	return 0;
 }
 
+TS_S32 TS_NV12_Vertical_Concat_Correct(const TS_U8 *Src_NV12_Top,
+                                 const TS_U8 *Src_NV12_Bottom,
+                                 TS_U8 *Dst_NV12,
+                                 TS_S32 Width, TS_S32 Height,
+                                 TS_S32 StrideY, TS_S32 StrideUV)
+								 {
+									return nv12_vertical_concat_correct(Src_NV12_Top,
+                                 Src_NV12_Bottom,
+                                 Dst_NV12,
+                                 Width, Height,
+                                 StrideY, StrideUV);
+								 }
+
+TS_S32 TS_NV12_Scale_Ex(TS_U8* Src, TS_S32 Src_Width, TS_S32 Src_Height,
+                  TS_U8* Dst, TS_S32 Dst_Width, TS_S32 Dst_Height,
+                  TS_S32 Keep_Aspect)
+				  {
+					return nv12_scale_ex(Src, Src_Width, Src_Height,
+                  Dst, Dst_Width, Dst_Height,
+                  Keep_Aspect);
+				  }
 #endif
 
 #ifdef __cplusplus

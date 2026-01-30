@@ -929,7 +929,7 @@ static camera_module_params_t camera_module[CAMERA_NUM] = {
 				.sensor = load_sc2337p_aux1_sensor_driver,
 				.csid = load_sc2337p_aux1_csi2d_driver,
 				.tune = {
-					[CAMERA_HDR_MODE_NORMAL] = {load_sc2337p_normal_tuning_aux/*load_sc2337p_normal_tuning tuning_linear_slave*/, "sc2337p_nor.tun"},
+					[CAMERA_HDR_MODE_NORMAL] = {load_sc2337p_normal_tuning/*load_sc2337p_normal_tuning tuning_linear_slave*/, "sc2337p_nor.tun"},
 				},
 				.calib = {load_sc2337p_calibration, "sc2337p_ir.cal"},
 			},
@@ -939,7 +939,7 @@ static camera_module_params_t camera_module[CAMERA_NUM] = {
 				.sensor = load_sc2337p_aux1_sensor_driver,
 				.csid = load_sc2337p_aux1_csi2d_driver,
 				.tune = {
-					[CAMERA_HDR_MODE_NORMAL] = {load_sc2337p_normal_ir_aux_tuning, "sc2337p_nor_ir.tun"},
+					[CAMERA_HDR_MODE_NORMAL] = {load_sc2337p_normal_ir_tuning, "sc2337p_nor_ir.tun"},
 				},
 				.calib = {load_sc2337p_ir_calibration, "sc2337p_ir.cal"},
 			},
@@ -951,7 +951,7 @@ static camera_module_params_t camera_module[CAMERA_NUM] = {
 				.tune = {
 					[CAMERA_HDR_MODE_NORMAL] = {load_sc2337p_normal_tuning_aux, "sc2337p_nor_ir.tun"},
 				},
-				.calib = {load_sc2337p_ir_calibration, "sc2337p_ir.cal"},
+				.calib = {load_sc2337p_calibration, "sc2337p_ir.cal"},
 			},
 
 		},

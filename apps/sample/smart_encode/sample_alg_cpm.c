@@ -197,8 +197,9 @@ static TS_S32 SAMPLE_ALG_Yuv2Rgb(TS_U8 *y_image, TS_U8 *uv_image, TS_U8 *rgb_ima
 	}
 	TS_ALG_YUV2RGB(y_image, uv_image, rgb_image, src_width, src_height, des_width, des_height, rgb_type);
 #if 0
-	fp1 = fopen("./out.rgb", "w+");
-	fwrite(rgb_image, 1, image_width * image_height * 3, fp1);
+    FILE *fp1 = NULL;
+	fp1 = fopen("/mnt/sda0/weipai_1/out.rgb", "w+");
+	fwrite(rgb_image, 1, des_width * des_height * 3, fp1);
 	fclose(fp1);
 #endif
     return TS_SUCCESS;
@@ -277,7 +278,8 @@ TS_S32 SAMPLE_ALG_CPM_Config(AVS_GRP CPMGrp, int pipeNum, TS_U32 u32Width, TS_U3
 			//stCPMHandle.stPipeAttr[i].enPixelFormat = PIXEL_FORMAT_ARGB_8888;
         }
     }
-
+    SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm;
+    pthread_create(&(pCpmParam->stAlgProcPid), 0, SAMPLE_CPM_FrameProcess_Thread, (TS_VOID *)pCpmParam);
     stCPMHandle.init = SAMPLE_ALG_CPM_HANDLE_Init;
     stCPMHandle.exit = SAMPLE_ALG_CPM_HANDLE_Exit;
     stCPMHandle.process = SAMPLE_ALG_CPM_HANDLE_Process;
@@ -645,7 +647,7 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **
         pthread_mutex_lock(&(pCpmParam->stAlgProcLock));
         //if(pCpmParam->bResultUpdate)
         {
-            VIDEO_FRAME_INFO_S *inPipeFrameVenc = in[0];
+            VIDEO_FRAME_INFO_S *inPipeFrameVenc = in[1];
             unsigned char *YuvBuf = (unsigned char *)(TS_UL)(inPipeFrameVenc->stVFrame.u64VirAddr[0]);
             SAMPLE_ALG_Result_Proc(YuvBuf, &pCpmParam->stTmpResult);
 
@@ -663,7 +665,8 @@ TS_S32  SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **
     }
 #endif
 
-    memcpy(out[0], in[0], sizeof(VIDEO_FRAME_INFO_S));
+    //memcpy(out[0], in[0], sizeof(VIDEO_FRAME_INFO_S));
+    memcpy(out[1], in[1], sizeof(VIDEO_FRAME_INFO_S));
     VIDEO_FRAME_INFO_S *bufinfo = (VIDEO_FRAME_INFO_S *)in[0];
 #if SDK_VERSON_030
 #else

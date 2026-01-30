@@ -5,6 +5,7 @@ source ${TARGET_BUILD_DIR}/scripts/common_set.sh
 function build_all()
 {
     cp ./lib/${TARGET_LIBC}/librne_pal_* ${TARGET_STAGING_LIB}/librne_pal_linux.a -aprf
+    #cp -aprf ./lib/${TARGET_LIBC}/librne_pal_* ${TARGET_STAGING_LIB}/
     cp ./lib/${TARGET_LIBC}/librne_rt_g3.a ${TARGET_STAGING_LIB} -aprf
     cp ./lib/${TARGET_LIBC}/librne_common.a ${TARGET_STAGING_LIB} -aprf
     cp ./include/* ${TARGET_STAGING_INC} -aprf

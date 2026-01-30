@@ -1052,8 +1052,8 @@ int vp_video_encoder_init(int format)
     //sys
     VB_CONFIG_S stVbConf;
     memset(&stVbConf, 0, sizeof(VB_CONFIG_S));
-    stVbConf.astCommPool[0].u64BlkSize	 = 640*360*3/2;
-    stVbConf.astCommPool[0].u32BlkCnt	  = 1;
+    stVbConf.astCommPool[0].u64BlkSize	 = 1920*1080*3/2;
+    stVbConf.astCommPool[0].u32BlkCnt	  = 5;//1
     stVbConf.u32MaxPoolCnt = 1;
 
     ret = SAMPLE_COMM_SYS_Init(&stVbConf);
@@ -1079,7 +1079,7 @@ int vp_video_encoder_init(int format)
         pstPipeInfo->height     = 1080;
         pstPipeInfo->frameRate  = FRAME_RATE;
         pstPipeInfo->enWdrMode	= WDR_MODE_NONE;
-        pstPipeInfo->bIspByFly  = TS_TRUE;
+        pstPipeInfo->bIspByFly  = TS_FALSE;
         pstPipeInfo->bDynFpsSync = TS_FALSE;
         pstPipeInfo->enMastPipeMode = VI_ONLINE_VPSS_ONLINE;
 		pstPipeInfo->enPixFmt	= PIXEL_FORMAT_RGB_888;

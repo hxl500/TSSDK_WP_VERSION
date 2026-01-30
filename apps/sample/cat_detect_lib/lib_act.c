@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 #if 1
 #include "video_alg_catdetect-api.h"
@@ -55,12 +56,16 @@ void set_result(ALG_CatDetect_DET_RESULT_S *data);
 #endif
 
 static float EAT_Thres= 0.25;
-static int OUT_times= 2;
-static int EatOUT_times= 10;
-static int EAT_OUT_SHAKE_times = 10;//猫吃饭消抖时间,默认设置10s
-//static int EAT_OUT_SHAKE_begin = 0;
-
-
+static int OUT_times= 3000;
+static int EatOUT_times= 10000;
+static int EAT_OUT_SHAKE_times = 10000;
+static int has_eat_event = 0;//进食标记
+static long long get_current_time_ms()
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
 
 struct cat_in allcat[MAX_CAT_DET_NUM];
 int cat_num = 0;
@@ -71,132 +76,152 @@ void set_eta_thres(const float Thres)
 }
 void set_out_times(const int times)
 {
-	OUT_times = times;
+	if(times <= 0){
+		OUT_times = 3*1000;
+		return;
+	}
+	OUT_times = times * 1000;
 }
 
 void set_eat_out_times(const int times)
 {
-	if(times < 0){
-		EatOUT_times = 10;
+	if(times <= 0){
+		EatOUT_times = 10000;
 		return;
 	}
-
-	EatOUT_times = times;
+	EatOUT_times = times * 1000;
 }
 
 void set_eat_shake_out_times(const int times)
 {
-	if(times < 0){
-		EAT_OUT_SHAKE_times = 10;
+	if(times <= 0){
+		EAT_OUT_SHAKE_times = 10000;
 		return;
 	}
-	EAT_OUT_SHAKE_times = times;
+	EAT_OUT_SHAKE_times = times * 1000;
 }
 
+// int is_cat_eat(ALG_CatDetect_DET_BOX_S *data){
+// 	if((data->f32Xmax - data->f32Xmin)*(data->f32Ymax- data->f32Ymin) > EAT_Thres){
+// 		return ALG_CAT_ACT_EAT;
+// 	}
+// 	return ALG_CAT_ACT_INT;
+// }
 int is_cat_eat(ALG_CatDetect_DET_BOX_S *data){
-	if((data->f32Xmax - data->f32Xmin)*(data->f32Ymax- data->f32Ymin) > EAT_Thres){
-		return ALG_CAT_ACT_EAT;
+	const float rectCenterY = (data->f32Ymin + data->f32Ymax) * 0.5f;
+	if(0 == data->cam_id && rectCenterY>0.25f && rectCenterY<0.5f){
+		return ALG_CAT_ACT_EAT;//进食
 	}
 	return ALG_CAT_ACT_INT;
 }
-void cat_in_set(ALG_CatDetect_DET_BOX_S *data, int now){
+void cat_in_set(ALG_CatDetect_DET_BOX_S *data, long long now, int force_eat_event){
 	int i;
-//	int now = time(NULL);
-	if(cat_num > MAX_CAT_DET_NUM)
-		return;
-	for(i=0;i<cat_num;i++){
-		allcat[i].lasttime = now;
-	}
+	//printf("cat_num=%d,now:%lld,force_eat_event=%d\n",cat_num,now,force_eat_event);
 	if(cat_num >= MAX_CAT_DET_NUM)
 		return;
-	if(data->act == ALG_CAT_ACT_EAT){
-		for(i=0;i<cat_num;i++){
-			allcat[i].lasttimeEat = now;
-		}		
-	}
-	//if(now - EAT_OUT_SHAKE_begin < EAT_OUT_SHAKE_times){
-	//	data->act = ALG_CAT_ACT_INT;
-	//}
+	
 	for(i=0;i<cat_num;i++){
-		
 		if(strcmp(allcat[i].nameid,data->nameid) == 0){
-			if(data->act == ALG_CAT_ACT_EAT){
+			
+			if(force_eat_event == 1 || (data->act == ALG_CAT_ACT_EAT && data->cam_id == 0)){
 				if(allcat[i].first_eat == 0){
 					data->first_eat = 1;
 					allcat[i].first_eat = 1;
-					printf("id2=%s,first in,now=%d\n",data->nameid,now);
+					allcat[i].event_type = 2;
+					
+					printf("id=%s,first_eat,now=%lld\n",data->nameid,now);
 				}
+				allcat[i].lasttimeEat = now;
+				allcat[i].lasttime = now;
+				data->act = ALG_CAT_ACT_EAT;
+			}else{
+				if(allcat[i].first_in == 0 && allcat[i].event_type != 2){
+					data->first_in = 1;
+					allcat[i].first_in = 1;
+					allcat[i].event_type = 1;
+					
+					printf("id=%s,first in,now=%lld\n",data->nameid,now);
+				}
+				allcat[i].lasttime = now;
+				data->act = ALG_CAT_ACT_INT;
 			}
-			if(allcat[i].first_in == 0){
-				data->first_in = 1;
-				allcat[i].first_in = 1;
-				printf("id2=%s,first_eat in,now=%d\n",data->nameid,now);
-			}
-			//allcat[i].lasttime = now;
 			return;		
 		}
 	}
 	strcpy(allcat[cat_num].nameid,data->nameid);
-	//allcat[cat_num].id = data->id;
 	allcat[cat_num].act = data->act;
 	allcat[cat_num].lasttime = now;
 	allcat[cat_num].first_in = 1;
 	data->first_in = 1;
-	printf("id=%s,first in,now=%d\n",data->nameid,now);
-	if(data->act == ALG_CAT_ACT_EAT){
+	allcat[cat_num].event_type = 1;
+	printf("id=%s,first in,now=%lld\n",data->nameid,now);
+	
+	if(force_eat_event == 1 || (data->act == ALG_CAT_ACT_EAT && data->cam_id == 0)){
 		allcat[cat_num].first_eat = 1;
 		data->first_eat = 1;
-		allcat[i].lasttimeEat = now;
-		printf("id=%s,first_eat in,now=%d\n",data->nameid,now);
+		allcat[cat_num].lasttimeEat = now;
+		allcat[cat_num].event_type = 2;
+		allcat[cat_num].act = ALG_CAT_ACT_EAT;
+		data->act = ALG_CAT_ACT_EAT;
+		printf("id=%s,first_eat in,now=%lld\n",data->nameid,now);
 	}
 	
 	cat_num++;
 
 	return;
 }
-void is_cat_out(ALG_CatDetect_DET_RESULT_S *data, int now){
-//	int now = time(NULL);
+
+void is_cat_out(ALG_CatDetect_DET_RESULT_S *data, long long now){
 	int i = 0;
 	if(data->u32ObjNum >= MAX_CAT_DET_NUM-1)
 		return;
+	//printf("is_cat_out cat_num=%d,data->u32ObjNum:%d\n",cat_num,data->u32ObjNum);
 	for(i=0;i<cat_num;i++){
 		if(data->u32ObjNum >= MAX_CAT_DET_NUM - 1)
 			return;
-		if(allcat[i].first_in == 1){
-			if(now > allcat[i].lasttime + OUT_times || allcat[i].lasttime > now){
+		
+		if(allcat[i].event_type == 2){
+			//printf("allcat[i].lasttimeEat:%lld\n",allcat[i].lasttimeEat);
+			if(now - allcat[i].lasttimeEat > EatOUT_times){
 				memset(&data->stBox[data->u32ObjNum],0,sizeof(ALG_CatDetect_DET_BOX_S));
 				strcpy(data->stBox[data->u32ObjNum].nameid,allcat[i].nameid);
-				data->stBox[data->u32ObjNum].act = ALG_CAT_ACT_OUT;
+				data->stBox[data->u32ObjNum].act = ALG_CAT_ACT_EAT_OUT;
 				data->stBox[data->u32ObjNum].class_id = ALG_CAT_CLASS_ID_FACE;
 				data->stBox[data->u32ObjNum].f32Xmin = 0;
 				data->stBox[data->u32ObjNum].f32Ymin = 0;
 				data->stBox[data->u32ObjNum].f32Xmax = 0;
 				data->stBox[data->u32ObjNum].f32Ymax = 0;
-				printf("id=%s,out,now=%d\n",allcat[i].nameid,now);
-				allcat[i].first_in = 0;
-			
-
-				data->u32ObjNum++;
-			}		
-		}
-		if(allcat[i].first_eat == 1){
-			if(now > allcat[i].lasttimeEat + EatOUT_times || allcat[i].lasttime > now){
-				memset(&data->stBox[data->u32ObjNum],0,sizeof(ALG_CatDetect_DET_BOX_S));
-				strcpy(data->stBox[data->u32ObjNum].nameid,allcat[i].nameid);
-				data->stBox[data->u32ObjNum].act = ALG_CAT_ACT_OUT;
-				data->stBox[data->u32ObjNum].class_id = ALG_CAT_CLASS_ID_FACE;
-				data->stBox[data->u32ObjNum].f32Xmin = 0;
-				data->stBox[data->u32ObjNum].f32Ymin = 0;
-				data->stBox[data->u32ObjNum].f32Xmax = 0;
-				data->stBox[data->u32ObjNum].f32Ymax = 0;
-				printf("id=%s,eat out,now=%d\n",allcat[i].nameid,now);
+				printf("id=%s,eat out,now=%lld,EatOUT_times=%d\n",allcat[i].nameid,now,EatOUT_times);
 				allcat[i].first_eat = 0;
+				allcat[i].event_type = 0;
 				data->u32ObjNum++;
-			}		
+				has_eat_event = 0;
+			}
+		}else if(allcat[i].event_type == 1){
+			//printf("allcat[i].lasttime:%lld\n",allcat[i].lasttime);
+			if(now - allcat[i].lasttime > OUT_times){
+				memset(&data->stBox[data->u32ObjNum],0,sizeof(ALG_CatDetect_DET_BOX_S));
+				strcpy(data->stBox[data->u32ObjNum].nameid,allcat[i].nameid);
+				data->stBox[data->u32ObjNum].act = ALG_CAT_ACT_OUT;
+				data->stBox[data->u32ObjNum].class_id = ALG_CAT_CLASS_ID_FACE;
+				data->stBox[data->u32ObjNum].f32Xmin = 0;
+				data->stBox[data->u32ObjNum].f32Ymin = 0;
+				data->stBox[data->u32ObjNum].f32Xmax = 0;
+				data->stBox[data->u32ObjNum].f32Ymax = 0;
+				printf("id=%s,out,now=%lld,OUT_times=%d\n",allcat[i].nameid,now,OUT_times);
+				allcat[i].first_in = 0;
+				allcat[i].event_type = 0;
+				data->u32ObjNum++;
+			}
+		}
+		else
+		{
+
 		}
 	}
+	
 	for(i=0;i<cat_num;i++){
-		if(allcat[i].first_eat == 0 && allcat[i].first_in == 0){
+		if(allcat[i].event_type == 0){
 			if(i < cat_num - 1){
 				memcpy(&allcat[i],&allcat[i+1],(cat_num-1 -i)*sizeof(struct cat_in));			
 			}
@@ -205,18 +230,40 @@ void is_cat_out(ALG_CatDetect_DET_RESULT_S *data, int now){
 		}		
 	}
 
-	
-	
 	return;
-
 }
+
+
 void print_result(ALG_CatDetect_DET_RESULT_S *data){
 	int i;
 	if(data->u32ObjNum > 0){
 		printf("u32ObjNum=%d\n",data->u32ObjNum);
 	}
+	else
+	{
+		// printf("no cat\n");
+		// data->stBox[data->u32ObjNum].DetectionConf = 0;
+		// data->stBox[data->u32ObjNum].f32Xmin = 0;
+		// data->stBox[data->u32ObjNum].f32Ymin = 0;
+		// data->stBox[data->u32ObjNum].f32Xmax = 0;
+		// data->stBox[data->u32ObjNum].f32Ymax = 0;
+		// printf("id=%d,class_id=%d,act=%d,first_in=%d,first_eat=%d,DetectionConf=%f,MaxSimilarity=%f,cam_id=%d,point=%f,%f,%f,%f\n",
+		// 	data->stBox[data->u32ObjNum].nameid,
+		// 	data->stBox[data->u32ObjNum].class_id,
+		// 	data->stBox[data->u32ObjNum].act,
+		// 	data->stBox[data->u32ObjNum].first_in,
+		// 	data->stBox[data->u32ObjNum].first_eat,
+		// 	data->stBox[data->u32ObjNum].DetectionConf,
+		// 	data->stBox[data->u32ObjNum].MaxSimilarity,
+		// 	data->stBox[data->u32ObjNum].cam_id,
+		// 	data->stBox[data->u32ObjNum].f32Xmin,
+		// 	data->stBox[data->u32ObjNum].f32Ymin,
+		// 	data->stBox[data->u32ObjNum].f32Xmax,
+		// 	data->stBox[data->u32ObjNum].f32Ymax);
+	}
+	
 	for(i=0;i<data->u32ObjNum;i++){
-		printf("id=%s,class_id=%d,act=%d,first_in=%d,first_eat=%d,DetectionConf=%f,MaxSimilarity=%f,point=%f,%f,%f,%f\n",
+		printf("id=%d,class_id=%d,act=%d,first_in=%d,first_eat=%d,DetectionConf=%f,MaxSimilarity=%f,cam_id=%d,point=%f,%f,%f,%f\n",
 			data->stBox[i].nameid,
 			data->stBox[i].class_id,
 			data->stBox[i].act,
@@ -224,30 +271,47 @@ void print_result(ALG_CatDetect_DET_RESULT_S *data){
 			data->stBox[i].first_eat,
 			data->stBox[i].DetectionConf,
 			data->stBox[i].MaxSimilarity,
+			data->stBox[i].cam_id,
 			data->stBox[i].f32Xmin,
 			data->stBox[i].f32Ymin,
 			data->stBox[i].f32Xmax,
 			data->stBox[i].f32Ymax);
 	}
 }
+/*处理检测结果并生成事件*/
 
 void set_result(ALG_CatDetect_DET_RESULT_S *data){
 	int i;
-	int now = time(NULL);
-	for(i=0;i<data->u32ObjNum;i++){
+	long long now = get_current_time_ms();
+	int original_u32ObjNum = data->u32ObjNum;
+
+	
+
+	for(i=0;i<original_u32ObjNum;i++){
 		if(data->stBox[i].class_id != ALG_CAT_CLASS_ID_FOOD){
 			data->stBox[i].act = is_cat_eat(&data->stBox[i]);
 			printf("id=%s,act=%d\n",data->stBox[i].nameid,data->stBox[i].act);
 			data->stBox[i].first_in = 0;
 			data->stBox[i].first_eat = 0;
-			cat_in_set(&data->stBox[i],now);		
+			
+			if(data->stBox[i].act == ALG_CAT_ACT_EAT && data->stBox[i].cam_id == 0){
+				has_eat_event = 1;
+			}
 		}else{
 			data->stBox[i].act = ALG_CAT_ACT_INT;
 			data->stBox[i].first_in = 0;
 			data->stBox[i].first_eat = 0;
 		}
 	}
+	//printf("has_eat_event=%d\n",has_eat_event);
+	for(i=0;i<original_u32ObjNum;i++){
+		if(data->stBox[i].class_id != ALG_CAT_CLASS_ID_FOOD){
+			cat_in_set(&data->stBox[i],now,has_eat_event);	
+		}
+	}
+	
 	is_cat_out(data,now);
+
 	print_result(data);
 	return;
 }

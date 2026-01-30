@@ -77,12 +77,14 @@ typedef	struct{
 	VIDEO_FRAME_INFO_S			stAlgBuffer;
 	
 	pthread_t					stAlgProcPid;
+	pthread_t					stAlgProcPid1;
 	ALG_BUFFER_STATUS			enAlgProcBufStatus;
 	TS_BOOL						bAlgProcRunFlag;
 	TS_BOOL                     bResultUpdate; 
 	pthread_mutex_t             stAlgProcLock; 
 }SAMPLE_VIDEO_ALG_CPM;
 
+extern SAMPLE_VIDEO_ALG_CPM gstSampleVideoAlgCpm[2];
 
 typedef TS_S32 (*pf_ALG_INSTANCE_Init)(TS_VOID **pHandle);
 typedef struct ALG_INIT_S{
@@ -100,6 +102,6 @@ SAMPLE_ALG_INIT_CFG_S *SAMPLE_ALG_GetInitCfg(TS_U32 *pNum);
 void SAMPLE_CPM_GetChnMode(SAMPLE_VIDEO_CHN_MODE mode, SAMPLE_ALG_CHN_IMG_SIZE_S *pstAlgChnSize);
 
 
-TS_VOID SAMPLE_CPM_GetSrcSize(TS_U32 *pw, TS_U32 *ph);
+TS_VOID SAMPLE_CPM_GetSrcSize(TS_U32 *pw, TS_U32 *ph, TS_U32 CPMGrp);
 
 #endif

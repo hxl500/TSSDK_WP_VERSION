@@ -24,17 +24,39 @@
 #include "ts_alg_body_detect_v2.h"
 #include "ts_rne_nn_input.h"
 #include "arrr_diff.h"
+
+#include "ts_alg_nn.h"
+#include "ts_rne_nn_output.h"
+
+#include "forward_data_save.h"
+
+#include "ts_rne_record_file.h"
 //#define TS_MPI_TRP_RNE_W_ALIGN_BYTES_NUM (4)	//56 de sdk内部会对齐
 // #define TIME_CONSUME_LAYER
 
+//#define RNE_RECORD_FILE 1
 static TS_BOOL gRneOff = TS_FALSE;
-static TS_FLOAT gThreshold = 0.25;//0.25;
+static TS_FLOAT gThreshold = 0.25;
 static TS_FLOAT *gPostProcBuf = NULL;
 
 #ifdef TS_MPI_TRP_RNE_W_ALIGN_BYTES_NUM
 	static TS_U8 *gParamStride = NULL;
 #endif
 ALG_CatDetect_DET_PARAM_S det_param_cpp;
+
+#define POSTPROC_BUF_SIZE (1 * (3 * 80 * 80 + 3 * 40 * 40 + 3 * 20 * 20) * 6)
+static TS_FLOAT gPostProcBufStatic[POSTPROC_BUF_SIZE] = {0};
+
+static int compare_scores_desc(const void *a, const void *b, void *arg) {
+    int idx_a = *(int *)a;
+    int idx_b = *(int *)b;
+    float *pScore = (float *)arg;
+    float score_a = pScore[idx_a];
+    float score_b = pScore[idx_b];
+    if (score_a > score_b) return -1;
+    if (score_a < score_b) return 1;
+    return 0;
+}
 
 static int nms(float *torchCat, int len1, int len2, int *nmsOut, float thresh, int maxDet)
 {
@@ -58,22 +80,7 @@ static int nms(float *torchCat, int len1, int len2, int *nmsOut, float thresh, i
         torchCat[len2 * i + 3] = tmpY + tmpH / 2;
     }
 
-    for (int i = 0; i < len1; i++) {
-        float max = pScore[i];
-        int idx_t = i;
-        for (int j = i + 1; j < len1; j++) {
-            if (max < pScore[j]) {
-                max = pScore[j];
-                idx_t = j;
-            }
-        }
-        int tt = box_idx[i];
-        box_idx[i] = box_idx[idx_t];
-        box_idx[idx_t] = tt;
-        float tt1 = pScore[i];
-        pScore[i] = pScore[idx_t];
-        pScore[idx_t] = tt1;
-    }
+    qsort_r(box_idx, len1, sizeof(int), compare_scores_desc, pScore);
 
     int	cnt = 0;
     int sSzie = len1;
@@ -168,11 +175,12 @@ int test_conf_get()
 	return ret;
 }
 //
-int TS_ALG_PcppDetV12_PostProcess(unsigned char **blob, unsigned int *cstride, unsigned int *s32C, float *fcoeff, float* dataVec, TS_U16* dataidx)
+int TS_ALG_PcppDetV12_PostProcess(unsigned char **blob, unsigned int *cstride, unsigned int *s32C, float *fcoeff, float* dataVec, TS_U16* dataidx, float detectionConfThres)
 {
 	int nblob = 3;
 	//int imShape[4] = {1, 3, 640, 480}; // = srcShape
-	int shapeVec2[3][5] = {{1, 3, 48, 80, 6}, {1, 3, 24, 40, 6}, {1, 3, 12, 20, 6}};//0,1,2
+	//int shapeVec2[3][5] = {{1, 3, 48, 80, 6}, {1, 3, 24, 40, 6}, {1, 3, 12, 20, 6}};//0,1,2
+    int shapeVec2[3][5] = {{1, 3,80, 80, 6}, {1, 3, 40, 40, 6}, {1, 3, 20, 20, 6}};//0,1,2
 
     float scale_output[] = { fcoeff[0], fcoeff[1], fcoeff[2] }; //1,2,3
 
@@ -187,9 +195,7 @@ int TS_ALG_PcppDetV12_PostProcess(unsigned char **blob, unsigned int *cstride, u
 
     int len = 0;
     int idxtmp = 0;
-    float petThres = 0.7;//0.45; //confidence
-    	TS_ALG_CatDetect_GetParam(&det_param_cpp);
-	petThres = det_param_cpp.DetectionConfThres;
+    float petThres = detectionConfThres;
     int maxNms = 1024;  // maximum number of boxes into torchvision.ops.nms()
     for (int i = 0; i < nblob; i++)
     {
@@ -248,7 +254,6 @@ int TS_ALG_PcppDetV12_PostProcess(unsigned char **blob, unsigned int *cstride, u
 
 TS_S32 TS_ALG_BodyDetect_Init(TS_VOID **handle, ALG_MODEL_INIT_S *param)
 {
-	printf("22222==============\n");
 	TS_MPI_TRP_RNE_SetLogLevel(RNE_LOG_INFO);
     ALG_LOGI("rne log level : %d\n", TS_MPI_TRP_RNE_GetLogLevel());
     ALG_LOGI("rne lib version :%s\n", TS_MPI_TRP_RNE_GetSdkVersion());
@@ -343,12 +348,10 @@ TS_S32 TS_ALG_BodyDetect_Init(TS_VOID **handle, ALG_MODEL_INIT_S *param)
 		return -1;
 	}
 	//ALG_LOGE("malloc error!\n");
-    int shapeVec[] = { 1, 3 * 48 * 80 + 3 * 24 * 40 + 3 * 12 * 20, 6};//0,1,2
-    gPostProcBuf = (TS_FLOAT *)malloc(shapeVec[0] * shapeVec[1] * shapeVec[2] * sizeof(float));    //362,880
-	if(NULL == gPostProcBuf){
-		ALG_LOGE("malloc error !!!\n");
-		return -1;
-	}
+    //int shapeVec[] = { 1, 3 * 48 * 80 + 3 * 24 * 40 + 3 * 12 * 20, 6};//0,1,2  384*640 115200 2880
+    int shapeVec[] = { 1, 3 * 80 * 80 + 3 * 40 * 40 + 3 * 20 * 20, 6};//0,1,2    640*640
+
+    gPostProcBuf = gPostProcBufStatic;
 	ALG_LOGI("algo heap size is %d\n", shapeVec[0] * shapeVec[1] * shapeVec[2] * sizeof(float));
 	//ALG_LOGE("malloc error!\n");
     *handle = nModel;
@@ -370,57 +373,69 @@ TS_S32 TS_ALG_BodyDetect_Exit(TS_VOID *handle)
 		TS_MPI_TRP_RNE_CloseDevice();
 	}
 
-	if(TS_NULL != gPostProcBuf) {
-		free(gPostProcBuf);
-		gPostProcBuf = TS_NULL;
-	}
-
     return 0;
 }
 
 TS_S32 strides[3] = {8, 16, 32};
+
 std::unordered_map<std::string, std::vector<std::vector<TS_S32>>> anchors = {{"0", {{10, 13}, {16, 30}, {33, 23}}},
     {"1", {{30, 61}, {62, 45}, {59, 119}}},
     {"2", {{116, 90}, {156, 198}, {373, 326}}}
 };
 
+
+TS_S32 manual_save_rne_blob(RNE_BLOBS_S *blobs, const char *saveName) {
+    if (!blobs || !saveName) return -1;
+    FILE *fp = fopen(saveName, "wb");
+    if (!fp) return -1;
+    // 遍历所有blob，按顺序写入原始二进制数据
+    int ilen = 0;
+    for(int i = 0;i<blobs->u32NBlob;i++)
+    {
+        ilen += blobs->stpBlob[i].u32Size;
+    }
+    for (int ii=0; ii<blobs->u32NBlob; ii++) {
+        if (blobs->stpBlob[ii].vpAddr && blobs->stpBlob[ii].u32Size>0) {
+            fwrite((void*)blobs->stpBlob[ii].vpAddr, 1, blobs->stpBlob[ii].u32Size, fp);
+        }
+    }
+    fclose(fp);
+    return 0;
+}
+
+int g_ncount = 0;
 TS_S32 TS_ALG_BodyDetect_Process(TS_VOID *handle, ALG_IMAGE_S *image, ALG_CatDetect_DET_RESULT_S *result)
 {
-#if 1
-	TS_U32 cstride[16];
-	TS_FLOAT fcoeff[16];
-
+    const float ORIG_W = 640.0f;
+    const float ORIG_H = 720.0f;
+    const float NET_W  = 569.0f;
+    const float NET_H  = 640.0f;
+    const float CONF_THRESHOLD = 0.45f;
+    const float CENTER_Y_THRESHOLD = 0.5f;
+    const float CAM0_Y_SCALE = 2.0f;
+    const float CAM0_Y_MAX_SCALE = 2.0f;
+    const float CAM1_Y_OFFSET = 0.5f;
+    const float CAM1_Y_SCALE = 2.0f;
+    const float CAM1_Y_MAX_SCALE = 2.0f;
+    const int MAX_DETECTIONS = 100;
+    const int EXPECTED_BLOB_COUNT = 3;
+    const float X_OFFSET = (ORIG_W - NET_W) * 0.5f;
+    const float X_SCALE = ORIG_W / NET_W;
+    const float Y_SCALE = ORIG_H / NET_H;
+    const float INV_ORIG_W = 1.0f / ORIG_W;
+    const float INV_ORIG_H = 1.0f / ORIG_H;
+    
     if(TS_NULL == image->pData || TS_NULL == result) {
 		ALG_LOGE("error, Invalid parameter!\n");
 		return -1;
 	}
-	//printf("%s,%d\n",__FUNCTION__,__LINE__);
+
 	RNE_NET_S *nModel = (RNE_NET_S *)handle;
-
-
-
-#if 1 //input image is 640*384
+    
     if (0 != TS_MPI_TRP_RNE_SetInputBlobsAddr(nModel, (void *)(image->pData), (void *)(image->pDataPhy))) {
-        ALG_LOGE("set inputBlobs error!\n");
-        return -1;
+         ALG_LOGE("set inputBlobs error!\n");
+         return -1;
     }
-#else //input image is 640*360
-	if(image->s32H != 360 || image->s32W != 640) {
-		ALG_LOGE("error, Invalid image size need resize!\n");
-		ALG_LOGE("image h:%d w:%d, blob h:%d w:%d\n", image->s32H, image->s32W,
-								inputBlobs->stpBlob->s32H, inputBlobs->stpBlob->s32W);
-		return -1;
-	}
-
-	//image pretreatment: 640*360->640*384, fill with 114(0x72) before image and end image
-	TS_U32 inputSize = image->s32C*image->s32H*image->s32W;
-	TS_U32 imageSize = image->s32C*640*384;
-
-	memset(imageBuf, 114, imageSize);
-	memcpy(&imageBuf[image->s32C*640*12], image->pData, inputSize);
-
-	nModel->vpInput = imageBuf;
-#endif
 
 #ifdef TIME_CONSUME_LAYER
 	 TS_MPI_TRP_RNE_StartSysTimer();
@@ -430,8 +445,6 @@ TS_S32 TS_ALG_BodyDetect_Process(TS_VOID *handle, ALG_IMAGE_S *image, ALG_CatDet
 	 TS_MPI_TRP_RNE_NetBindTimeState(nModel, &time);
 #endif
 
-//	TS_U32 time0 = 0;//TIME_CACL_GET();
-	//TIME_CACL_GET();
 	RNE_BLOBS_S *outputBlobs = TS_MPI_TRP_RNE_Forward(nModel);
 	if (outputBlobs == TS_NULL) {
 		ALG_LOGE("net forward error!\n");
@@ -441,9 +454,6 @@ TS_S32 TS_ALG_BodyDetect_Process(TS_VOID *handle, ALG_IMAGE_S *image, ALG_CatDet
 		return -1;
 	}
 
-//	TS_U32 time1 = 1;//TIME_CACL_GET();
-	//ALG_LOGE("rne forward time:%d\n",time1-time0);
-	//printf("%s,%d\n",__FUNCTION__,__LINE__);
 #ifdef TIME_CONSUME_LAYER
 	ALG_LOGD("total time:%lld us\n", TS_MPI_TRP_RNE_GetTotalTime(&time));
 	ALG_LOGD("forward time:%lld us\n", TS_MPI_TRP_RNE_GetTimeOfForward(&time));
@@ -452,93 +462,89 @@ TS_S32 TS_ALG_BodyDetect_Process(TS_VOID *handle, ALG_IMAGE_S *image, ALG_CatDet
 	TS_MPI_TRP_RNE_ReleaseTimeState(&time);
 #endif
 
-	//ALG_LOGI("net body detect forward done\n");
-	//ALG_LOGI("outputBlobs->u32NBlob:%d\n", outputBlobs->u32NBlob);
-
 	if(outputBlobs->u32NBlob <= 0 || TS_NULL == outputBlobs->stpBlob) {
 		ALG_LOGE("net forward no result!\n");
 		return -1;
 	}
 
-	//ALG_LOGD("totol u32NBlob:%d\n", outputBlobs->u32NBlob);
-	// 检查是否有足够的blob数量
-	if(outputBlobs->u32NBlob < 3) {
-		ALG_LOGE("insufficient blobs: expected at least 3, got %d\n", outputBlobs->u32NBlob);
+	if(outputBlobs->u32NBlob < EXPECTED_BLOB_COUNT) {
+		ALG_LOGE("insufficient blobs: expected at least %d, got %d\n", EXPECTED_BLOB_COUNT, outputBlobs->u32NBlob);
 		return -1;
 	}
-	
-	TS_U8 *resultAddr[3] = {TS_NULL, TS_NULL, TS_NULL};
-    unsigned int s32C[16];
+
+	TS_U8 *resultAddr[EXPECTED_BLOB_COUNT];
+    unsigned int s32C[EXPECTED_BLOB_COUNT];
+    unsigned int cstride[EXPECTED_BLOB_COUNT];
+    float fcoeff[EXPECTED_BLOB_COUNT];
     
-	// 检查每个vpAddr是否为空
-	for(int i = 0; i < 3; i++) {
+	for(int i = 0; i < EXPECTED_BLOB_COUNT; i++) {
 		if(TS_NULL == outputBlobs->stpBlob[i].vpAddr) {
 			ALG_LOGE("blob[%d] vpAddr is NULL\n", i);
 			return -1;
 		}
 		resultAddr[i] = (TS_U8 *)outputBlobs->stpBlob[i].vpAddr;
-	}
-	for(TS_U32 i = 0; i < outputBlobs->u32NBlob; i++) {
+        
+        const int c = outputBlobs->stpBlob[i].s32C;
+        const int s32BitNum = outputBlobs->stpBlob[i].s32BitNum;
+        const int c_align = TS_MPI_TRP_RNE_CStride(c, s32BitNum, outputBlobs->stpBlob[i].bIsJoined);
 
-		const int c = outputBlobs->stpBlob[i].s32C;
-		const int s32BitNum = outputBlobs->stpBlob[i].s32BitNum;
-		const int c_align = TS_MPI_TRP_RNE_CStride(c, s32BitNum, outputBlobs->stpBlob[i].bIsJoined);
+        cstride[i] = c_align;
+        s32C[i] = c;
+        fcoeff[i] = *(outputBlobs->stpBlob[i].fCoeff);
+    }
 
-		cstride[i] = c_align;
-		s32C[i] = c;
-		//fcoeff[i] = outputBlobs->stpBlob[i].fCoeff[0];
-		fcoeff[i] = *(outputBlobs->stpBlob[i].fCoeff);
-		// ALG_LOGD("u32NBlob:%d H: %d, W:%d, C:%d, Cstride:%d, coeff: %f\n", i, outputBlobs->stpBlob[i].s32H, outputBlobs->stpBlob[i].s32W, outputBlobs->stpBlob[i].s32C, c_align, outputBlobs->stpBlob[i].fCoeff[0]);
-	}
-
-    float* dataVec = (float*)gPostProcBuf;    //362,880
-    TS_U16* dataidx = (TS_U16 *)(gPostProcBuf + 15*1024);    //362,880
-	int len = TS_ALG_PcppDetV12_PostProcess(resultAddr, cstride, s32C, fcoeff, dataVec, dataidx);
-    const int maxDet = 100;       // maximum detections per image
-    int *nmsOut = (int *)(gPostProcBuf + len * 5);
-    // if (33 == frameNo1)
-	// {
-        // ALG_LOGD("before nms, len = %d\n", len);
-    //     for(int i=0; i<len; i++){
-    //         ALG_LOGD("%f, %f, %f, %f, %f, %f\n", dataVec[i*no_yolo + 0], dataVec[i*no_yolo + 1], dataVec[i*no_yolo + 2], dataVec[i*no_yolo + 3], dataVec[i*no_yolo + 4], dataVec[i*no_yolo + 5]);
-    //     }
-    // }
-
-    //int outNum = nonMaxSuppression(dataVec, confThres, iouThres, agnosticNms, maxDet, false, len, no_yolo, nmsOut);
-    int outNum = nms(gPostProcBuf, len, 5, nmsOut, 0.45, maxDet);  // NMS
-	result->u32ObjNum = outNum;
-	
+    float* dataVec = (float*)gPostProcBuf;
+    TS_U16* dataidx = (TS_U16 *)(gPostProcBuf + 15*1024);
+    
     TS_ALG_CatDetect_GetParam(&det_param_cpp);
-	
-	//petThres = det_param_cpp.DetectionConfThres;
-	int j = 0;
+    const float detectionConfThres = det_param_cpp.DetectionConfThres;
+    
+	int len = TS_ALG_PcppDetV12_PostProcess(resultAddr, cstride, s32C, fcoeff, dataVec, dataidx, detectionConfThres);
+    int *nmsOut = (int *)(gPostProcBuf + len * 5);
+    int outNum = nms(gPostProcBuf, len, 5, nmsOut, CONF_THRESHOLD, MAX_DETECTIONS);
+    
+    int validObjCount = 0;
 	
 	for (int i = 0; i < outNum; i++) {
-		//printf("outNum %d\n",outNum);
-		if(gPostProcBuf[nmsOut[i] * 5 + 4] <= det_param_cpp.DetectionConfThres){
+		const float conf = gPostProcBuf[nmsOut[i] * 5 + 4];
+		if(conf <= detectionConfThres) {
 			continue;
 		}
-		result->stBox[j].f32Xmin = gPostProcBuf[nmsOut[i] * 5 + 0]/640.0;
-		result->stBox[j].f32Ymin = MAX(0, (gPostProcBuf[nmsOut[i] * 5 + 1]-12.0) / 360.0);
-		result->stBox[j].f32Xmax = gPostProcBuf[nmsOut[i] * 5 + 2]/640.0;
-		result->stBox[j].f32Ymax = MAX(0, (gPostProcBuf[nmsOut[i] * 5 + 3]-12.0) / 360.0);
-
-		//result->stBox[i].f32Xmin = gPostProcBuf[nmsOut[i] * 5 + 0];
-		//result->stBox[i].f32Ymin = gPostProcBuf[nmsOut[i] * 5 + 1];
-		//result->stBox[i].f32Xmax = gPostProcBuf[nmsOut[i] * 5 + 2];
-		//result->stBox[i].f32Ymax = gPostProcBuf[nmsOut[i] * 5 + 3];
-        result->stBox[j].DetectionConf = gPostProcBuf[nmsOut[i] * 5 + 4];
-		 result->stBox[j].class_id = dataidx[nmsOut[i]] - 5;
-		 j++;
-		//printf("f32Score=%f\n",result->stBox[i].f32Score);
-        //printf("f32Xmin %f,f32Ymin %f,f32Xmax %f,f32Ymax %f\n",gPostProcBuf[nmsOut[i] * 5 + 0],
-        //    gPostProcBuf[nmsOut[i] * 5 + 1],gPostProcBuf[nmsOut[i] * 5 + 2],gPostProcBuf[nmsOut[i] * 5 + 3]);
+        
+        float x1 = (gPostProcBuf[nmsOut[i] * 5 + 0] - X_OFFSET) * X_SCALE;
+        float y1 = gPostProcBuf[nmsOut[i] * 5 + 1] * Y_SCALE;
+        float x2 = (gPostProcBuf[nmsOut[i] * 5 + 2] - X_OFFSET) * X_SCALE;
+        float y2 = gPostProcBuf[nmsOut[i] * 5 + 3] * Y_SCALE;
+        
+        x1 = fmaxf(0.0f, x1);
+        y1 = fmaxf(0.0f, y1);
+        x2 = fminf(ORIG_W - 1, x2);
+        y2 = fminf(ORIG_H - 1, y2);
+        
+        x2 = fmaxf(x1, x2);
+        y2 = fmaxf(y1, y2);
+        
+        const float rectCenterY = (y1 + y2) * 0.5f * INV_ORIG_H;
+        const int camId = (rectCenterY < CENTER_Y_THRESHOLD) ? 0 : 1;
+        
+        result->stBox[validObjCount].f32Xmin = x1 * INV_ORIG_W;
+        result->stBox[validObjCount].f32Xmax = x2 * INV_ORIG_W;
+        result->stBox[validObjCount].DetectionConf = conf;
+        result->stBox[validObjCount].class_id = dataidx[nmsOut[i]] - 5;
+        result->stBox[validObjCount].cam_id = camId;
+        
+        if (camId == 0) {
+            result->stBox[validObjCount].f32Ymin = y1 * INV_ORIG_H * CAM0_Y_SCALE;
+            result->stBox[validObjCount].f32Ymax = y2 * INV_ORIG_H * CAM0_Y_MAX_SCALE;
+        } else {
+            result->stBox[validObjCount].f32Ymin = (y1 * INV_ORIG_H - CAM1_Y_OFFSET) * CAM1_Y_SCALE;
+            result->stBox[validObjCount].f32Ymax = (y2 * INV_ORIG_H - CAM1_Y_OFFSET) * CAM1_Y_MAX_SCALE;
+        }
+        
+        validObjCount++;
 	}
-	result->u32ObjNum = j;
-    //ALG_LOGE("rne postprocess time:%d\n",TIME_CACL_GET()-time1);
-
-#endif
-
+    
+	result->u32ObjNum = validObjCount;
 	return 0;
 }
 

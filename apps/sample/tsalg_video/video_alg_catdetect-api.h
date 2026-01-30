@@ -38,6 +38,7 @@ typedef struct tsALG_CatDetect_DET_BOX_S {
 	int class_id;//ALG_CAT_CLASS_ID
 	char first_in;//1表示第一次进入
 	char first_eat;//1表示第一次吃东西
+	int cam_id;//0表示上方摄像头1，1表示下方摄像头1
 } ALG_CatDetect_DET_BOX_S;
 
 typedef struct tsALG_CatDetect_DET_RESULT_S {
@@ -141,5 +142,39 @@ TS_CHAR* CatYoloModelVerGet(void);
 //获取当前embedding模型的版本号
 TS_CHAR* CatEmbeddingModelVerGet(void);
 
+/**
+ * @brief 垂直拼接NV12格式的视频帧
+ *
+ * @param Src_NV12_Top  顶部视频帧的NV12数据指针
+ * @param Src_NV12_Bottom 底部视频帧的NV12数据指针
+ * @param Dst_NV12  输出拼接后的NV12数据指针
+ * @param Width  视频帧的宽度
+ * @param Height 视频帧的高度
+ * @param StrideY  Y平面的行 stride
+ * @param StrideUV UV平面的行 stride
+ *
+ * @return 0 成功 -1 失败
+ */
+TS_S32 TS_NV12_Vertical_Concat_Correct(const TS_U8 *Src_NV12_Top,
+                                 const TS_U8 *Src_NV12_Bottom,
+                                 TS_U8 *Dst_NV12,
+                                 TS_S32 Width, TS_S32 Height,
+                                 TS_S32 StrideY, TS_S32 StrideUV);
 
+/**
+ * @brief 缩放NV12格式的视频帧
+ *
+ * @param Src  输入视频帧的NV12数据指针
+ * @param Src_Width  输入视频帧的宽度
+ * @param Src_Height 输入视频帧的高度
+ * @param Dst  输出缩放后的NV12数据指针
+ * @param Dst_Width  输出视频帧的宽度
+ * @param Dst_Height 输出视频帧的高度
+ * @param Keep_Aspect  是否保持宽高比，1表示保持，0表示不保持
+ *
+ * @return 0 成功 -1 失败
+ */
+TS_S32 TS_NV12_Scale_Ex(TS_U8* Src, TS_S32 Src_Width, TS_S32 Src_Height,
+                  TS_U8* Dst, TS_S32 Dst_Width, TS_S32 Dst_Height,
+                  TS_S32 Keep_Aspect);
 #endif

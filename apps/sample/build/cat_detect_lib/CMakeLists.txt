@@ -9,6 +9,15 @@ link_directories($ENV{TARGET_STAGING_LIB})
 
 include_directories($ENV{TARGET_STAGING_INC}/opencv4)
 link_directories($ENV{TARGET_STAGING_LIB}/opencv4/3rdparty)
+ 
+include_directories(${APP_SRC_DIR}/../../libs/algstore/libalgutil_cv/include)
+include_directories(${APP_SRC_DIR}/../../libs/algstore/libalgutil_cv/lib/uclibc)
+ 
+include_directories(${APP_SRC_DIR}/../../libs/trp/rne/include)
+include_directories(${APP_SRC_DIR}/../../trp/rne/lib/uclibc)
+
+include_directories(${SAMPLE_CATDETECT_DIR})
+include_directories(${SAMPLE_CATDETECT_DIR}/record_file)
 
 #include_directories($ENV{TARGET_STAGING_INC}/opencv4)
 #link_directories($ENV{TARGET_STAGING_LIB}/opencv4/3rdparty)
@@ -30,14 +39,27 @@ add_library(${SAMPLE_LIB_CATDETECT} STATIC
 	${SAMPLE_CATDETECT_DIR}/lib_dirsync.c
 	${SAMPLE_CATDETECT_DIR}/lib_file_sync.c
 	${SAMPLE_CATDETECT_DIR}/lib_iot_net.c
+	${SAMPLE_CATDETECT_DIR}/forward_data_save.c
+	${SAMPLE_CATDETECT_DIR}/qi_nv12_yuv.cpp
+	${SAMPLE_CATDETECT_DIR}/record_file/ts_rne_record_file.c
+	 
 )
 
 TARGET_LINK_LIBRARIES(${SAMPLE_LIB_CATDETECT} libalgcommon.a)
 #TARGET_LINK_LIBRARIES(${SAMPLE_LIB_CATDETECT} libalgfiresmokedetect.a)
 TARGET_LINK_LIBRARIES(${SAMPLE_LIB_CATDETECT} -Wl,--start-group dl pthread stdc++  libalgcommon.a
 		mpi
+		libalgutil_cv.a
+		librne_rt_g3.a
+	librne_pal_linux.a
+	librne_common.a
+	${ALGO_LIB}
+		libtrp.a
  -Wl,--end-group)
 
+#set_target_properties(cat_detect_lib PROPERTIES
+#    ARCHIVE_OUTPUT_DIRECTORY "${APP_SRC_DIR}/tsalg_video"
+#)
 set_target_properties(cat_detect_lib PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${APP_SRC_DIR}/tsalg_video"
+    ARCHIVE_OUTPUT_DIRECTORY "${APP_SRC_DIR}/../../libs/algstore/libalgmotiondetect/lib/uclibc"
 )

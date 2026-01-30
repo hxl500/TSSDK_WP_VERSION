@@ -1,0 +1,10 @@
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/clean-all.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/app_device.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/app_isp.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/isp_app.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/edit_cache.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/rebuild_cache.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/list_install_components.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/install.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/install/local.dir
+/home/hxl/桌面/qi_code/weipai_2025_12_25/tssdk_wp_1225/libs/isp/lib/uclibc/tunning/build/temp/app_layer/build/CMakeFiles/install/strip.dir

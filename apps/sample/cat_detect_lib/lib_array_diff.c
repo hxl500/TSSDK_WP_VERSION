@@ -80,6 +80,10 @@ static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 static float SimilarityThres = 0.4;
 static ALG_CatDetect_DET_PARAM_S det_param_arrar;
 static int isgray = 0;
+
+static float *g_norm_cache = NULL;
+static float *g_norm_cache2 = NULL;
+static struct catNameInfo g_lib_nameInfo_static = {0};
 TS_VOID CatSetGrayMode(TS_CHAR flag)//设置夜间模式,0表示白天，1表示夜间
 {
 	printf("CatSetGrayMode=%d\n",flag);
@@ -95,6 +99,32 @@ TS_CHAR CatGetGrayMode(TS_VOID)//获取夜间模式,0表示白天，1表示夜�
 	return isgray;
 }
 
+static void precompute_norms() {
+    if (g_catdata == NULL || cat_data_num == 0) {
+        return;
+    }
+    
+    if (g_norm_cache != NULL) {
+        free(g_norm_cache);
+    }
+    if (g_norm_cache2 != NULL) {
+        free(g_norm_cache2);
+    }
+    
+    g_norm_cache = (float *)malloc(cat_data_num * sizeof(float));
+    g_norm_cache2 = (float *)malloc(cat_data_num * sizeof(float));
+    
+    for (int i = 0; i < cat_data_num; i++) {
+        float norm = 0.0;
+        float norm2 = 0.0;
+        for (int j = 0; j < CAT_ARRAY_LEN; j++) {
+            norm += g_catdata[i].data[j] * g_catdata[i].data[j];
+            norm2 += g_catdata2[i].data[j] * g_catdata2[i].data[j];
+        }
+        g_norm_cache[i] = sqrt(norm);
+        g_norm_cache2[i] = sqrt(norm2);
+    }
+}
 
 static float compute_l2_norm(const float *arr) {
     float sum = 0;
@@ -159,11 +189,7 @@ static float compute_l2_distance(const float *arr1, const float *arr2) {
 
 float compare_vector(float *dst,float *src){
 	float ret =compute_l2_distance(dst,src);
-
-	printf("compare_vector ret2=%f\n",ret);
 	return ret;
-	//return -1;
-
 }
 float Simi = 0;
 void set_simi(float data)
@@ -175,8 +201,6 @@ float get_simi()
 {
 	return Simi;
 }
-struct catNameInfo * lib_nameInfo = NULL;
-
 static struct catNameInfo * get_catNameInfo(float *src){
 	if(g_catdata ==NULL || cat_data_num == 0){
 		return NULL;
@@ -184,11 +208,7 @@ static struct catNameInfo * get_catNameInfo(float *src){
 	if(g_cat_nameinfo ==NULL || g_cat_nameinfo_num == 0){
 		//return NULL;
 	}
-	if(lib_nameInfo == NULL)
-	{
-		lib_nameInfo = (struct catNameInfo*)malloc(sizeof(struct catNameInfo));
-		memset(lib_nameInfo,0,sizeof(struct catNameInfo));
-	}
+	memset(&g_lib_nameInfo_static, 0, sizeof(struct catNameInfo));
 	//printf("begin2\n");
 	int i;
 	int j;
@@ -203,10 +223,15 @@ static struct catNameInfo * get_catNameInfo(float *src){
 	}else{
 		SimilarityThres = det_param_arrar.SimilarityThres_Day;
 	}
+	
+	float norm_src = 0.0;
+	for (j = 0; j < CAT_ARRAY_LEN; j++) {
+		norm_src += src[j] * src[j];
+	}
+	norm_src = sqrt(norm_src);
+	
 	for(i=0;i<cat_data_num;i++){
-		//printf("i=%d\n",i);
 		float ptmp[CAT_ARRAY_LEN];
-		printf("isgray=%d\n",isgray);
 		if(isgray){
 			for(j=0;j<CAT_ARRAY_LEN;j++){
 				ptmp[j] = g_catdata2[i].data[j];
@@ -216,74 +241,19 @@ static struct catNameInfo * get_catNameInfo(float *src){
 				ptmp[j] = g_catdata[i].data[j];
 			}
 		}
-#if 0
-		//memcpy(ptmp,g_catdata[i].data,sizeof(ptmp));
-		printf("ptmp data int\n");
-		for(j=0;j<128;j++){
-			printf("%d ",g_catdata[i].data[j]);
-		}
-		printf("\n");
-#endif
-#if 0
-		printf("ptmp data\n");
-		for(j=0;j<128;j++){
-			printf("%f ",ptmp[j]);
-		}
-		printf("\n");
-#endif
 		normalize_array(ptmp);
-#if 0
-		printf("ptmp data2\n");
-		for(j=0;j<128;j++){
-			printf("%f ",ptmp[j]);
-		}
-		printf("\n");
-#endif
-		#if 0
-		ret = compare_vector(ptmp,src);
-		printf("===============id=%d,ret=%f,retmin=%f\n",g_catdata[i].id,ret,retmin);
-		if(ret < retmin && ret <= SimilarityThres){
-			retmin = ret;
-			minnum = i;
-			printf("minnum=%d\n",minnum);
-		}
-		
-		#else
 		ret = cosine_similarity(ptmp,src,CAT_ARRAY_LEN);
-		printf("===============id=%s,ret=%f,retmin=%f\n",g_catdata[i].id,ret,retmin);
 		if(ret > retmax){
 			retmax = ret;
 			minnum = i;
-			printf("minnum=%d\n",minnum);
 		}
-
-		#endif
-#if 0
-		//int *p = (int *)(g_catdata[i].data[0]);
-		if(compare_vector(ptmp,src) == 0){
-			for(j=0;j<g_cat_nameinfo_num;j++){
-				printf("i=%d,j=%d,id=%d,tid=%d\n",i,j,g_catdata[i].id,g_cat_nameinfo[j].id);
-				if(g_catdata[i].id == g_cat_nameinfo[j].id){
-					return &g_cat_nameinfo[i];
-				}
-			}
-			return NULL;
-		}
-#endif
 	}
-	printf("=========minnum=%d,retmax=%f\n",minnum,retmax);
-	//if(minnum == 1000 || retmin > 0.51){
-//	if(minnum == 1000 || retmin > 0.8){
-//		return NULL;
-//	}
 	set_simi(retmax);
 	if(minnum == 1000 || retmax < SimilarityThres){
 		return NULL;
 	}
-	strcpy(lib_nameInfo->id,g_catdata[minnum].id);
-	//lib_nameInfo->id = g_catdata[minnum].id;
-	printf("id=%s,tid=%s\n",g_catdata[minnum].id,lib_nameInfo->id);
-	return lib_nameInfo;
+	strcpy(g_lib_nameInfo_static.id,g_catdata[minnum].id);
+	return &g_lib_nameInfo_static;
 }
 extern int rsn_detect_file(char *src_file,int *result);
 extern int rsn_detect_file2(char *src_file,float *result,float *result2);
@@ -498,6 +468,7 @@ int  get_catName_id(float *src,char*idstr){
 
 			//}
 		}
+		precompute_norms();
 		free(g_picdata);
 		g_picdata = NULL;
 		cat_pic_num = 0;
@@ -505,7 +476,6 @@ int  get_catName_id(float *src,char*idstr){
 	p = get_catNameInfo(srctmp);
 	if(p != NULL){
 		strcpy(idstr,p->id);
-		printf("idstr=%s\n",idstr);
 		pthread_mutex_unlock(&mut);
 		return 0;
 	}
@@ -555,7 +525,7 @@ int  change_catName_info(struct cat_data*data,int datanum, struct catNameInfo *c
 			}
 			printf("\n");
 		}
-
+		precompute_norms();
 
 	}else{
 		g_catdata = NULL;
@@ -607,6 +577,14 @@ int  change_catName_info2(struct catPicInfo*data,int datanum, struct catNameInfo
 	if(g_catdata2){
 		free(g_catdata2);
 		g_catdata2 = NULL;
+	}
+	if(g_norm_cache){
+		free(g_norm_cache);
+		g_norm_cache = NULL;
+	}
+	if(g_norm_cache2){
+		free(g_norm_cache2);
+		g_norm_cache2 = NULL;
 	}
 
 	cat_data_num= 0;

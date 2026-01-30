@@ -6,6 +6,11 @@ include_directories(${SAMPLE_ALG_VIDEO_DIR})
 #include_directories(${APP_SRC_DIR}/../include)
 include_directories(${APP_SRC_DIR}/../../libs/mpp/include)
 include_directories(${APP_SRC_DIR}/../../libs/live555/include/live555)
+#libs/algstore/opencv4.5.5/include/opencv4/opencv2/opencv.hpp
+include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4)
+include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4/opencv2)
+link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4)
+link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4/3rdparty)
 
 if ($ENV{TARGET_UCLIBC} MATCHES uclibc)
     set(LIBC uclibc)
@@ -83,6 +88,7 @@ elseif(TARGET_CHIPSERIES STREQUAL TX5215BX OR  TARGET_CHIPSERIES STREQUAL TX5239
 	${SAMPLE_ALG_VIDEO_DIR}/video_alg_bodytrack.c
 	${SAMPLE_ALG_VIDEO_DIR}/video_alg_catdetect.c
 	${SAMPLE_ALG_VIDEO_DIR}/sample_motor.c
+	# ${SAMPLE_ALG_VIDEO_DIR}/qi_nv12_yuv.cpp
 	)
 
 	list(APPEND ALGO_LIB algpbcedetect algpts algaiperimeter algbodydetect)
@@ -102,6 +108,7 @@ else()
 	${SAMPLE_ALG_VIDEO_DIR}/sample_alg_cpm.c
 	${SAMPLE_ALG_VIDEO_DIR}/video_alg_motiondetect.c
 	${SAMPLE_ALG_VIDEO_DIR}/video_alg_pcppdetect.c
+	# ${SAMPLE_ALG_VIDEO_DIR}/qi_nv12_yuv.c
 	)
 
 endif()
@@ -121,5 +128,8 @@ TARGET_LINK_LIBRARIES(${SAMPLE_APP_ALG_VIDEO} -Wl,--start-group dl pthread stdc+
 	libalgmotiondetect.a
 	libalgpcppdetect.a
 	libcat_detect_lib.a
+
+	libopencv_img_hash.a
+	libopencv_world.a
 	-Wl,--end-group
 )

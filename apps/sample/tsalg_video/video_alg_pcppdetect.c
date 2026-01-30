@@ -108,7 +108,7 @@ TS_S32 VIDEO_ALG_MultiObj_Proc(TS_VOID *pHandle, ALG_IMAGE_S *pImage, ALG_IMAGE_
     return s32Ret;
 }
 
-TS_VOID  VIDEO_ALG_MultiObj_ResultProc(TS_U8 *pYuvBuf,  TS_U32 width, TS_U32 height, TS_U32 u32ImageRatio, TS_VOID *pAlgResult)
+TS_VOID  VIDEO_ALG_MultiObj_ResultProc(TS_U8 *pYuvBuf,  TS_U32 width, TS_U32 height, TS_U32 u32ImageRatio, TS_VOID *pAlgResult, TS_U32 u32Chn)
 {
     RECT rect;
     TS_U32 i;

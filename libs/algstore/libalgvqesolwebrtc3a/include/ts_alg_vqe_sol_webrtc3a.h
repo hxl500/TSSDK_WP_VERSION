@@ -7,6 +7,7 @@
 #include "ts_alg_mmsens.h"
 #include "ts_alg_omlsa.h"
 #include "ts_alg_noisegate.h"
+#include "ts_alg_anr_nn.h"
 
 #include "ts_alg_type.h"
 
@@ -21,12 +22,7 @@ extern "C"
 #define ALG_VQE_MMSENS_MASK 0x08
 #define ALG_VQE_OMLSA_MASK 0x10
 #define ALG_VQE_NOISEGATE_MASK 0x20
-
-// typedef struct{
-// 	ALG_WEBRTC_AEC_INIT_S algAecInit;
-// 	ALG_WEBRTC_NSX_INIT_S algAnrInit;
-// 	ALG_WEBRTC_AGC_INIT_S algAgcInit;
-// }ALG_VQE_SOL_WEBRTC3A_INIT_S;
+#define ALG_VQE_NNANR_MASK 0x40
 
 typedef struct{
 	TS_S16 s16MsInSndCardBuf;
@@ -49,6 +45,11 @@ typedef struct{
 	TS_FLOAT fAttackTime; //uint:s
 	TS_FLOAT fReleaseTime; //uint:s
 	TS_S32 s32Threshold; // unit:dB
+	TS_U8 *pGraph;
+	TS_U8 *pWeight;
+	TS_U32 u32GraphSize;
+	TS_VOID *vpSelfBuf;
+	TS_S32 s32AecThreshold;
 	ALG_VQE_SOL_WEBRTC3A_PROC_S solVqeProc;
 	ALG_VQE_SOL_WEBRTC3A_SET_PARAM_S solVqeSetParam;
 }ALG_VQE_SOL_WEBRTC3A_CONF_PARAM;

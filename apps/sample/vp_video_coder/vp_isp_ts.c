@@ -7,7 +7,7 @@
 #include "vp_printf.h"
 
 
-#define VP_SENSOR_NUM 3
+#define VP_SENSOR_NUM 2//3
 
 typedef struct {
     uint8_t init_flag;
