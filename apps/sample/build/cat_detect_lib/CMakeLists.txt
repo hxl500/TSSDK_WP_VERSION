@@ -7,8 +7,8 @@ set(END_GRP "-Wl,--end-group")
 message("SOLIBPATH = $ENV{TARGET_STAGING_LIB}")
 link_directories($ENV{TARGET_STAGING_LIB})
 
-include_directories($ENV{TARGET_STAGING_INC}/opencv4)
-link_directories($ENV{TARGET_STAGING_LIB}/opencv4/3rdparty)
+# include_directories($ENV{TARGET_STAGING_INC}/opencv4)
+# link_directories($ENV{TARGET_STAGING_LIB}/opencv4/3rdparty)
  
 include_directories(${APP_SRC_DIR}/../../libs/algstore/libalgutil_cv/include)
 include_directories(${APP_SRC_DIR}/../../libs/algstore/libalgutil_cv/lib/uclibc)
@@ -27,6 +27,10 @@ include_directories(${SAMPLE_CATDETECT_DIR}/record_file)
 #include_directories(${APP_SRC_DIR}/../../libs/algstore/libalgcommon/include)
 #include_directories(${APP_SRC_DIR}/tsalg_lib)
 #link_directories(${APP_SRC_DIR}/temp/tsalg_lib)
+include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4)
+include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4/opencv2)
+link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4)
+link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4/3rdparty)
 
 add_library(${SAMPLE_LIB_CATDETECT} STATIC
 	${SAMPLE_CATDETECT_DIR}/lib_ts_alg_body_detect.cpp
@@ -39,7 +43,7 @@ add_library(${SAMPLE_LIB_CATDETECT} STATIC
 	${SAMPLE_CATDETECT_DIR}/lib_dirsync.c
 	${SAMPLE_CATDETECT_DIR}/lib_file_sync.c
 	${SAMPLE_CATDETECT_DIR}/lib_iot_net.c
-	${SAMPLE_CATDETECT_DIR}/forward_data_save.c
+	# ${SAMPLE_CATDETECT_DIR}/forward_data_save.c
 	${SAMPLE_CATDETECT_DIR}/qi_nv12_yuv.cpp
 	${SAMPLE_CATDETECT_DIR}/record_file/ts_rne_record_file.c
 	 
@@ -55,6 +59,8 @@ TARGET_LINK_LIBRARIES(${SAMPLE_LIB_CATDETECT} -Wl,--start-group dl pthread stdc+
 	librne_common.a
 	${ALGO_LIB}
 		libtrp.a
+		libopencv_img_hash.a
+		libopencv_world.a
  -Wl,--end-group)
 
 #set_target_properties(cat_detect_lib PROPERTIES

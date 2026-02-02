@@ -7,10 +7,10 @@ include_directories(${SAMPLE_ALG_VIDEO_DIR})
 include_directories(${APP_SRC_DIR}/../../libs/mpp/include)
 include_directories(${APP_SRC_DIR}/../../libs/live555/include/live555)
 #libs/algstore/opencv4.5.5/include/opencv4/opencv2/opencv.hpp
-include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4)
-include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4/opencv2)
-link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4)
-link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4/3rdparty)
+# include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4)
+# include_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/include/opencv4/opencv2)
+# link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4)
+# link_directories(${APP_SRC_DIR}/../../libs/algstore/opencv4.5.5/lib/uclibc/opencv4/3rdparty)
 
 if ($ENV{TARGET_UCLIBC} MATCHES uclibc)
     set(LIBC uclibc)
@@ -129,7 +129,7 @@ TARGET_LINK_LIBRARIES(${SAMPLE_APP_ALG_VIDEO} -Wl,--start-group dl pthread stdc+
 	libalgpcppdetect.a
 	libcat_detect_lib.a
 
-	libopencv_img_hash.a
-	libopencv_world.a
+	# libopencv_img_hash.a
+	# libopencv_world.a
 	-Wl,--end-group
 )

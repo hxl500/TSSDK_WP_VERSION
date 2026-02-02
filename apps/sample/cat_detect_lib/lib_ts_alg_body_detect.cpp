@@ -28,7 +28,7 @@
 #include "ts_alg_nn.h"
 #include "ts_rne_nn_output.h"
 
-#include "forward_data_save.h"
+// #include "forward_data_save.h"
 
 #include "ts_rne_record_file.h"
 //#define TS_MPI_TRP_RNE_W_ALIGN_BYTES_NUM (4)	//56 de sdk内部会对齐
