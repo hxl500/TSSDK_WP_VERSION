@@ -179,4 +179,11 @@ TS_S32 TS_NV12_Scale_Ex(TS_U8 *Src, TS_S32 Src_Width, TS_S32 Src_Height,
                    TS_U8* Dst, TS_S32 Dst_Width, TS_S32 Dst_Height,
                   TS_S32 Keep_Aspect);
 
+// int nv12_scale_fit_fast(const uint8_t *src_nv12,
+//                          int src_w, int src_h, int src_stride,
+//                          uint8_t *dst_nv12,
+//                          int dst_w, int dst_h);
+TS_S32 TS_NV12_Scale_Fit_Fast(TS_U8 *Src_NV12, TS_S32 Src_Width, TS_S32 Src_Height,TS_S32 Src_Stride,
+                   TS_U8* Dst_NV12, TS_S32 Dst_Width, TS_S32 Dst_Height);
+
 #endif

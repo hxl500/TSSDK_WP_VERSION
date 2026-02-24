@@ -1012,25 +1012,21 @@ static TS_S32 SAMPLE_TSALG_VIDEO_Match(TS_S32 s32Index, SAMPLE_ALG_TYPE_E *penMa
 static TS_VOID *VPSS_VENC_DrawBox_ResultSync_Thread(TS_VOID *pParam)
 {
 	VPSS_VENC_DRAW_BOX_S *pDrawBox = (VPSS_VENC_DRAW_BOX_S *)pParam;
-	SAMPLE_VIDEO_ALG_CPM *pCpmParam;
+	SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm[0];
 
 	prctl(PR_SET_NAME, (unsigned long)"vpss_venc_sync", 0, 0, 0);
 	SAMPLE_PRT("VPSS_VENC_DrawBox_ResultSync_Thread started for CPM Grp %d\n", pDrawBox->s32CPMGrp);
 
 	while (pDrawBox->bRunFlag)
 	{
-		//pCpmParam = &gstSampleVideoAlgCpm[pDrawBox->s32CPMGrp];
-		pCpmParam = &gstSampleVideoAlgCpm[0];
-
-		//SAMPLE_ALG_RESULT_S *pCurResult = (SAMPLE_ALG_RESULT_S *)pAlgResult;
-		//ALG_CatDetect_DET_RESULT_S *pResult = &(pCurResult->gstAlgCatdetResult);
 		pthread_mutex_lock(&pCpmParam->stAlgProcLock);
 		if (pCpmParam->bResultUpdate)
 		{
 			pthread_mutex_lock(&pDrawBox->stResultLock);
-			memcpy(&pDrawBox->stAlgResult, &pCpmParam->stTmpResult, sizeof(SAMPLE_ALG_RESULT_S));
+			memcpy(&pDrawBox->stAlgResult, &pCpmParam->stAlgResult, sizeof(SAMPLE_ALG_RESULT_S));
 			pDrawBox->bResultUpdate = TS_TRUE;
 			pthread_mutex_unlock(&pDrawBox->stResultLock);
+			pCpmParam->bResultUpdate = TS_FALSE; // 重置更新标志
 		}
 		pthread_mutex_unlock(&pCpmParam->stAlgProcLock);
 

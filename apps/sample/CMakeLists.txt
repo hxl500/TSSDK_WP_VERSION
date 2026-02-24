@@ -6,7 +6,7 @@ cmake_policy(SET CMP0054 NEW)
 
 message(STATUS "ENABLE_MPP_TRACE:$ENV{ENABLE_MPP_TRACE}")
 
-if($ENV{ENABLE_MPP_TRACE} EQUAL 1)
+if(DEFINED ENV{ENABLE_MPP_TRACE} AND "$ENV{ENABLE_MPP_TRACE}" STREQUAL "1")
 	add_definitions(-DENABLE_MPP_TRACE)
 endif()
 
@@ -17,6 +17,7 @@ include (${CMAKE_CURRENT_SOURCE_DIR}/common.cmake)
 # add_subdirectory (${APP_SRC_DIR}/build/audio             ${APP_SRC_DIR}/temp/audio)
 # add_subdirectory (${APP_SRC_DIR}/build/trp/cve           ${APP_SRC_DIR}/temp/trp/cve)
 # add_subdirectory (${APP_SRC_DIR}/build/soft_vdec_lcd     ${APP_SRC_DIR}/temp/soft_vdec_lcd)
+add_subdirectory (${APP_SRC_DIR}/build/tscv      ${APP_SRC_DIR}/temp/tscv)
 add_subdirectory (${APP_SRC_DIR}/build/cat_detect_lib        ${APP_SRC_DIR}/temp/cat_detect_lib)
 add_subdirectory (${APP_SRC_DIR}/build/tsalg_video        ${APP_SRC_DIR}/temp/tsalg_video)
 # add_subdirectory (${APP_SRC_DIR}/build/vdec        		${APP_SRC_DIR}/temp/vdec)

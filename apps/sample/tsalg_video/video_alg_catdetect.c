@@ -15,6 +15,8 @@ TS_S32 VIDEO_ALG_CatDetect_Init(TS_VOID **pHandle)
 
 	param.yolo_model_cfg = (TS_U8 *)strdup("/model/yolov5_7_quantize_r.cfg");
 	param.yolo_model_weight = (TS_U8 *)strdup("/model/yolov5_7_quantize_r.weight");
+	//param.yolo_model_cfg = (TS_U8 *)strdup("");
+	//param.yolo_model_weight = (TS_U8 *)strdup("");
 	
 	//param.yolo_model_cfg = (TS_U8*)strdup("/model/yolov5.cfg");
 	//param.yolo_model_weight = (TS_U8*)strdup("/model/yolov5.weight");

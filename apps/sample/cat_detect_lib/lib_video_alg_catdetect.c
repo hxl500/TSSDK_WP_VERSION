@@ -913,6 +913,13 @@ TS_S32 TS_NV12_Scale_Ex(TS_U8* Src, TS_S32 Src_Width, TS_S32 Src_Height,
                   Dst, Dst_Width, Dst_Height,
                   Keep_Aspect);
 				  }
+
+TS_S32 TS_NV12_Scale_Fit_Fast(TS_U8 *Src_NV12, TS_S32 Src_Width, TS_S32 Src_Height,TS_S32 Src_Stride,
+                   TS_U8* Dst_NV12, TS_S32 Dst_Width, TS_S32 Dst_Height)
+				   {
+					return nv12_scale_fit_fast(Src_NV12, Src_Width, Src_Height, Src_Stride,
+                  Dst_NV12, Dst_Width, Dst_Height);
+				   }
 #endif
 
 #ifdef __cplusplus

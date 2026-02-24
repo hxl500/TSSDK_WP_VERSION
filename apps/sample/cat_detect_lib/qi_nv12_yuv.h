@@ -170,7 +170,10 @@ int STITCH_SCALE_Process_Fast(STITCH_SCALE_PARAM_S *pParam,
 //  * @return 缩放后的NV12数据指针，失败返回NULL
 //  */
 // uint8_t* STITCH_SCALE_GetScaledFrame(STITCH_SCALE_PARAM_S *pParam);
-
+int nv12_scale_fit_fast(const uint8_t *src_nv12,
+                         int src_w, int src_h, int src_stride,
+                         uint8_t *dst_nv12,
+                         int dst_w, int dst_h);
 #ifdef __cplusplus
 }
 #endif

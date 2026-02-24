@@ -34,8 +34,9 @@ typedef struct tsALG_CatDetect_DET_BOX_S {
 	float DetectionConf; //这个猫的检测框置信度
 	float MaxSimilarity; //这个猫与数据库中图片的最大相似度
 	char nameid[64];
-	int act;//检测出的猫行为
-	int class_id;//ALG_CAT_CLASS_ID
+	int act;//检测出的猫进入事件 结束 进入 进食 进食结束
+	//int act_cat;//检测出的猫进食事件 结束 进入 进食 进食结束 
+	int class_id;//ALG_CAT_CLASS_ID 检测出的猫行为 正脸 余粮 头顶 离开
 	char first_in;//1表示第一次进入
 	char first_eat;//1表示第一次吃东西
 	int cam_id;//0表示上方摄像头1，1表示下方摄像头1
@@ -174,7 +175,15 @@ TS_S32 TS_NV12_Vertical_Concat_Correct(const TS_U8 *Src_NV12_Top,
  *
  * @return 0 成功 -1 失败
  */
-TS_S32 TS_NV12_Scale_Ex(TS_U8* Src, TS_S32 Src_Width, TS_S32 Src_Height,
-                  TS_U8* Dst, TS_S32 Dst_Width, TS_S32 Dst_Height,
+TS_S32 TS_NV12_Scale_Ex(TS_U8 *Src, TS_S32 Src_Width, TS_S32 Src_Height,
+                   TS_U8* Dst, TS_S32 Dst_Width, TS_S32 Dst_Height,
                   TS_S32 Keep_Aspect);
+
+// int nv12_scale_fit_fast(const uint8_t *src_nv12,
+//                          int src_w, int src_h, int src_stride,
+//                          uint8_t *dst_nv12,
+//                          int dst_w, int dst_h);
+TS_S32 TS_NV12_Scale_Fit_Fast(TS_U8 *Src_NV12, TS_S32 Src_Width, TS_S32 Src_Height,TS_S32 Src_Stride,
+                   TS_U8* Dst_NV12, TS_S32 Dst_Width, TS_S32 Dst_Height);
+
 #endif

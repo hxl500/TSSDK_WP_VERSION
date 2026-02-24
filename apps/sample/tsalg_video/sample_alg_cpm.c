@@ -29,11 +29,13 @@
 
 #include "video_alg_catdetect-api.h"
 
+ 
+
 #define USE_CPM 1
 
 #define SINGLE_WIDTH 640
 #define SINGLE_HEIGHT 360
-#define DST_WIDTH 640
+#define DST_WIDTH 640//640
 #define DST_HEIGHT 640
 #define ALG_RGBA_CHN 4
 #define ALG_RGB_SIZE (DST_WIDTH * DST_HEIGHT * ALG_RGBA_CHN)
@@ -43,6 +45,8 @@
 #define VI_DEV_ID 0
 #define VI_CHN_ID 1
 
+ 
+ 
 /*******************************************************
  * *
  * *    alg instance init table
@@ -387,96 +391,41 @@ static TS_VOID *SAMPLE_CPM_ALG_Process(void *p)
     TS_S32 s32Ret = TS_SUCCESS;
     SAMPLE_VIDEO_ALG_CPM *pCpmParam = (SAMPLE_VIDEO_ALG_CPM *)p;
     SAMPLE_ALG_INSTANCE_S *pcurAlgInst;
-
-    prctl(PR_SET_NAME, (unsigned long)"tsalg_proc_thread", 0, 0, 0);
-    SAMPLE_PRT("SAMPLE_COMM_ALG_FACE_Process run\n");
-
-    long t0, t1, t2, t3;
     static TS_S32 Process_frame_count = 0;
 
-    while (pCpmParam->bAlgProcRunFlag)
-    {
-        if (pCpmParam->enAlgProcBufStatus != BUFFER_STATUS_ALG_PROCESS)
-        {
-            goto algo_next_loop1;
-        }
-
-       // t0 = getSystemTime();
-        pthread_mutex_lock(&g_AlgoFaceInLock);
-        ALG_IMAGE_S localAlgoFaceIn = AlgoFaceIn;
-        ALG_IMAGE_S localAlgoSrcFaceIn = AlgoSrcFaceIn;
-        pthread_mutex_unlock(&g_AlgoFaceInLock);
-       // t1 = getSystemTime();
-
-        for (int i = 0; i < pCpmParam->u32ActualAlgNum; ++i)
-        {
-            pcurAlgInst = pCpmParam->pstAlgInstList[i];
-            if (pcurAlgInst->pf_Process != NULL)
-            {
-                s32Ret = pcurAlgInst->pf_Process(pcurAlgInst, &localAlgoSrcFaceIn, &localAlgoFaceIn, &(pCpmParam->stAlgResult));
-                if (TS_SUCCESS != s32Ret)
-                {
-                    SAMPLE_PRT("TS_ALGO_Process error\n");
-                    return TS_NULL;
-                }
-            }
-        }
-       // t2 = getSystemTime();
-
-        VB_BLK tmp_vb_blk = TS_MPI_VB_PhysAddr2Handle(pCpmParam->stAlgBuffer.stVFrame.u64PhyAddr[0]);
-        s32Ret = TS_MPI_VB_ReleaseBlock(tmp_vb_blk);
-        if (s32Ret != 0)
-        {
-            SAMPLE_PRT("TS_MPI_VB_ReleaseBlock error\n");
-        }
-
-        pthread_mutex_lock(&(pCpmParam->stAlgProcLock));
-        memcpy((TS_VOID *)&(pCpmParam->stTmpResult), (TS_VOID *)&(pCpmParam->stAlgResult), sizeof(SAMPLE_ALG_RESULT_S));
-        pCpmParam->bResultUpdate = TS_TRUE;
-        pthread_mutex_unlock(&(pCpmParam->stAlgProcLock));
-       // t3 = getSystemTime();
-
-        pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_FILL;
-
-        Process_frame_count++;
-        // printf("[Process] Frame %d: CopyData=%ldms, AlgoProcess=%ldms, SaveResult=%ldms, Total=%ldms\n",
-        //        Process_frame_count, t1 - t0, t2 - t1, t3 - t2, t3 - t0);
-        
-        //continue;
-
-algo_next_loop1:
-        usleep(1000 * 25);
-    }
-
-#endif
-    return TS_NULL;
-}
-static TS_VOID *SAMPLE_CPM_ALG_Process1(void *p)
-{
-#if USE_CPM
-    TS_S32 s32Ret = TS_SUCCESS;
-    static TS_S32 Frame_count = 0;
-    SAMPLE_VIDEO_ALG_CPM *pCpmParam = (SAMPLE_VIDEO_ALG_CPM *)p;
-
+    // static TS_U8 YuvImage[ALGO_YUV_SIZE];
+    // static TS_U8 frame_concat[SINGLE_WIDTH * SINGLE_HEIGHT * 3];
+    TS_S32 algo_yuv_size = 640 * 360 * 3; // alg_chn_w * alg_chn_h * 3 / 2; 拼接双目
+    int width = 640;
+    int height = 360;
+    int single_frame_size = width * height * 3 / 2;
+    int concat_frame_size = single_frame_size * 2; // 拼接后大小约为原来的两倍
     TS_U8 *YuvImage = NULL;
-    TS_U8 *frame_concat = NULL;
-    int single_frame_size = SINGLE_WIDTH * SINGLE_HEIGHT * 3 / 2;
-    int concat_frame_size = single_frame_size * 2;
+    TS_VOID *frame_concat;
+    TS_U64 pdconcatDataPhy;
+    //TS_VOID *frame_concat;
+    TS_U64 pdYuvImageDataPhy;
+    s32Ret = TS_MPI_SYS_MmzAlloc(&pdconcatDataPhy, (void**)&frame_concat, NULL, TS_NULL, concat_frame_size);
+    s32Ret = TS_MPI_SYS_MmzAlloc(&pdYuvImageDataPhy, (void**)&YuvImage, NULL, TS_NULL, algo_yuv_size);
+    //TS_U8 *frame_concat = (TS_U8 *)malloc(concat_frame_size);
+    
+    // YuvImage = (TS_U8 *)malloc(algo_yuv_size);
+	// if(YuvImage == NULL){
+	// 	printf("buffer malloc error!\n");
+	// 	//goto exit;
+	// }
+    // if(frame_concat == NULL){
+	// 	printf("buffer malloc error!\n");
+	// 	//goto exit;
+	// }
+    static TS_BOOL buffers_initialized = TS_FALSE;
 
-    YuvImage = (TS_U8 *)malloc(ALGO_YUV_SIZE);
-    if (YuvImage == NULL)
-    {
-        printf("buffer malloc error!\n");
-        return TS_NULL;
-    }
-
-    frame_concat = (TS_U8 *)malloc(concat_frame_size);
-    if (frame_concat == NULL)
-    {
-        printf("frame_concat malloc error!\n");
-        free(YuvImage);
-        return TS_NULL;
-    }
+    // if (!buffers_initialized)
+    // {
+    //     memset(YuvImage, 0, ALGO_YUV_SIZE);
+    //     memset(frame_concat, 0, sizeof(frame_concat));
+    //     buffers_initialized = TS_TRUE;
+    // }
 
     VIDEO_FRAME_INFO_S stFrameInfo = {0};
 
@@ -485,20 +434,24 @@ static TS_VOID *SAMPLE_CPM_ALG_Process1(void *p)
     {
         printf("TS_MPI_VPSS_EnableChn failed! ret = %d\n", s32Ret);
     }
-    
-    prctl(PR_SET_NAME, (unsigned long)"tsalg_proc_thread1", 0, 0, 0);
-    SAMPLE_PRT("SAMPLE_COMM_ALG_FACE_Process1 run[%d]\n", s32Ret);
 
-    long t0, t1, t2, t3, t4, t5;
+    prctl(PR_SET_NAME, (unsigned long)"tsalg_proc_thread", 0, 0, 0);
+    SAMPLE_PRT("SAMPLE_COMM_ALG_FACE_Process run (optimized thread with timing)\n");
+
+    long t0, t1, t2, t3, t4, t5, t6, t7, t8, t9;
+    static long total_time = 0;
+    static long max_time = 0;
+    static long min_time = 999999;
 
     while (pCpmParam->bAlgProcRunFlag)
     {
+        t0 = getSystemTime();
+
         if (pCpmParam->enAlgProcBufStatus != BUFFER_STATUS_ALG_PROCESS)
         {
-            goto algo_next_loop1;
+            goto algo_next_loop;
         }
 
-        //t0 = getSystemTime();
         s32Ret = TS_MPI_VPSS_GetChnFrame(VI_DEV_ID, VI_CHN_ID, &stFrameInfo, VI_GET_FRAME_TIMEOUT);
         if (s32Ret != TS_SUCCESS)
         {
@@ -506,33 +459,45 @@ static TS_VOID *SAMPLE_CPM_ALG_Process1(void *p)
             usleep(CPM_ALG_CYCLE * 1000);
             continue;
         }
-        //t1 = getSystemTime();
+        t1 = getSystemTime();
 
         int ret = TS_NV12_Vertical_Concat_Correct(pCpmParam->stAlgBuffer.stVFrame.u64VirAddr[0], stFrameInfo.stVFrame.u64VirAddr[0], (uintptr_t)frame_concat, SINGLE_WIDTH, SINGLE_HEIGHT, DST_WIDTH, DST_HEIGHT);
-        ret = TS_NV12_Scale_Ex((uintptr_t)frame_concat, SINGLE_WIDTH, SINGLE_HEIGHT * 2, (uintptr_t)YuvImage, DST_WIDTH, DST_HEIGHT, 1);
-        //t2 = getSystemTime();
+       // ret = TS_NV12_Scale_Ex((uintptr_t)frame_concat, SINGLE_WIDTH, SINGLE_HEIGHT * 2, (uintptr_t)YuvImage, DST_WIDTH, DST_HEIGHT, 1);
+//   ret = tscv_resize_vpss(gVpssHandle, (unsigned char*)src_vir_addr, (unsigned char*)src_phy_addr,
+//                                SINGLE_WIDTH, SINGLE_HEIGHT * 2, (unsigned char*)dst_vir_addr, (unsigned char*)dst_phy_addr,
+//                                DST_WIDTH, DST_HEIGHT, TSCV_IMGTYPE_YUV420SP_NV12);
+// 等比例缩放
+    if (TS_NV12_Scale_Fit_Fast(frame_concat, SINGLE_WIDTH, SINGLE_HEIGHT * 2,SINGLE_WIDTH,
+                       YuvImage, DST_WIDTH, DST_HEIGHT) == 0) {
+        printf("Scale success!\\n");
+    } else {
+        printf("Scale failed!\\n");
+    }
+    printf("tscv_resize_vpss ret = %d\n", ret);
+        t2 = getSystemTime();
 
         s32Ret = TS_MPI_VPSS_ReleaseChnFrame(VI_DEV_ID, VI_CHN_ID, &stFrameInfo);
         if (s32Ret != TS_SUCCESS)
         {
             printf("TS_MPI_VPSS_ReleaseChnFrame failed! ret = %d\n", s32Ret);
         }
+        t3 = getSystemTime();
 
         SAMPLE_ALG_Yuv2Rgb((uintptr_t)YuvImage,
                            (uintptr_t)YuvImage + DST_WIDTH * DST_HEIGHT,
                            (uintptr_t)AlgoFaceIn.pData, DST_WIDTH, DST_HEIGHT,
                            DST_WIDTH, DST_HEIGHT, ALG_RGB_TYPE_RGBA32);
-       //t3 = getSystemTime();
+        t4 = getSystemTime();
 
         s32Ret = TS_MPI_SYS_MmzFlushCache(AlgoFaceIn.pDataPhy, AlgoFaceIn.pData, ALG_RGB_SIZE);
         if (0 != s32Ret)
         {
-            SAMPLE_PRT("###error SAMPLE_CPM_ALG_Process1, TS_MPI_SYS_MmzFlushcache\n");
+            SAMPLE_PRT("###error SAMPLE_CPM_ALG_Process, TS_MPI_SYS_MmzFlushcache\n");
         }
-        //t4 = getSystemTime();
+        t5 = getSystemTime();
 
         pthread_mutex_lock(&g_AlgoFaceInLock);
-        Frame_count++;
+        Process_frame_count++;
         AlgoFaceIn.s32H = DST_HEIGHT;
         AlgoFaceIn.s32W = DST_WIDTH;
         AlgoFaceIn.s32C = ALG_RGBA_CHN;
@@ -544,30 +509,66 @@ static TS_VOID *SAMPLE_CPM_ALG_Process1(void *p)
         AlgoSrcFaceIn.pData = (void *)AlgoFaceIn.pData;
         AlgoSrcFaceIn.pDataPhy = pCpmParam->stAlgSrcBuffer.stVFrame.u64PhyAddr[0];
         pthread_mutex_unlock(&g_AlgoFaceInLock);
-        // t5 = getSystemTime();
+        t6 = getSystemTime();
 
-        // printf("[Process1] Frame %d: GetFrame=%ldms, Process=%ldms, Yuv2Rgb=%ldms, Flush=%ldms, Lock=%ldms, Total=%ldms\n",
-        //        Frame_count, t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t5 - t0);
+        for (int i = 0; i < pCpmParam->u32ActualAlgNum; ++i)
+        {
+            pcurAlgInst = pCpmParam->pstAlgInstList[i];
+            if (pcurAlgInst->pf_Process != NULL)
+            {
+                s32Ret = pcurAlgInst->pf_Process(pcurAlgInst, &AlgoSrcFaceIn, &AlgoFaceIn, &pCpmParam->stAlgResult);
+                if (TS_SUCCESS != s32Ret)
+                {
+                    SAMPLE_PRT("TS_ALGO_Process error\n");
+                }
+            }
+        }
+        t7 = getSystemTime();
 
-        //continue;
+        VB_BLK tmp_vb_blk = TS_MPI_VB_PhysAddr2Handle(pCpmParam->stAlgBuffer.stVFrame.u64PhyAddr[0]);
+        s32Ret = TS_MPI_VB_ReleaseBlock(tmp_vb_blk);
+        if (s32Ret != 0)
+        {
+            SAMPLE_PRT("TS_MPI_VB_ReleaseBlock error\n");
+        }
+        t8 = getSystemTime();
 
-    algo_next_loop1:
-        usleep(1000 * 50);  // 增加到50ms，减少CPU占用
+        pthread_mutex_lock(&(pCpmParam->stAlgProcLock));
+        // Mark result as updated for main CPM process to process
+        pCpmParam->bResultUpdate = TS_TRUE;
+        pthread_mutex_unlock(&(pCpmParam->stAlgProcLock));
+        t9 = getSystemTime();
+
+        pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_FILL;
+
+        long frame_time = t9 - t0;
+        total_time += frame_time;
+        if (frame_time > max_time) max_time = frame_time;
+        if (frame_time < min_time) min_time = frame_time;
+
+        if (Process_frame_count % 100 == 0)
+        {
+            printf("[Process] Frame %d: GetFrame=%ldms, Process=%ldms, Release=%ldms, Yuv2Rgb=%ldms, Flush=%ldms, Lock=%ldms, Algo=%ldms, VBRelease=%ldms, Swap=%ldms, Total=%ldms\n",
+                   Process_frame_count, t1 - t0, t2 - t1, t3 - t2, t4 - t3, t5 - t4, t6 - t5, t7 - t6, t8 - t7, t9 - t8, frame_time);
+            printf("[Stats] Avg=%ldms, Max=%ldms, Min=%ldms\n", 
+                   total_time / Process_frame_count, max_time, min_time);
+        }
+
+algo_next_loop:
+        usleep(1000 * 30);
     }
-
-exit_process:
-    if (NULL != YuvImage)
-    {
-        free(YuvImage);
-        YuvImage = NULL;
-    }
-
-    if (NULL != frame_concat)
-    {
-        free(frame_concat);
-        frame_concat = NULL;
-    }
-
+    // if (NULL != YuvImage) {
+    //     free(YuvImage);
+    //     YuvImage = NULL;
+    // }
+     
+    // if (NULL != frame_concat)
+    // {
+    //     free(frame_concat);
+    //     frame_concat = NULL;
+    // }
+    TS_MPI_SYS_MmzFree(pdconcatDataPhy,(TS_VOID *)frame_concat);
+    TS_MPI_SYS_MmzFree(pdYuvImageDataPhy,(TS_VOID *)YuvImage);
 #endif
     return TS_NULL;
 }
@@ -590,7 +591,7 @@ TS_S32 SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle)
     memset((TS_VOID *)&(pCpmParam->stAlgBuffer), 0, sizeof(VIDEO_FRAME_INFO_S));
 
     memset((TS_VOID *)&(pCpmParam->stAlgResult), 0, sizeof(SAMPLE_ALG_RESULT_S));
-    memset((TS_VOID *)&(pCpmParam->stTmpResult), 0, sizeof(SAMPLE_ALG_RESULT_S));
+    // 不需要临时结果，直接使用 stAlgResult
 
     pCpmParam->bAlgProcRunFlag = TS_TRUE;
     pCpmParam->enAlgProcBufStatus = BUFFER_STATUS_INIT;
@@ -611,7 +612,7 @@ TS_S32 SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle)
     memset(AlgoFaceIn.pData, 114, ALG_RGB_SIZE);
     pthread_mutex_unlock(&g_AlgoFaceInLock);
 
-    pthread_create(&(pCpmParam->stAlgProcPid1), 0, SAMPLE_CPM_ALG_Process1, (TS_VOID *)pCpmParam);
+ 
     pthread_create(&(pCpmParam->stAlgProcPid), 0, SAMPLE_CPM_ALG_Process, (TS_VOID *)pCpmParam);
 
     return TS_SUCCESS;
@@ -619,7 +620,7 @@ TS_S32 SAMPLE_ALG_CPM_HANDLE_Init(TS_VOID **pHandle)
 
 TS_VOID SAMPLE_ALG_CPM_HANDLE_Exit(TS_VOID *pHandle)
 {
-    SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm;
+    SAMPLE_VIDEO_ALG_CPM *pCpmParam = &gstSampleVideoAlgCpm[0];
     TS_S32 i;
 
     pCpmParam->bAlgProcRunFlag = TS_FALSE;
@@ -630,11 +631,7 @@ TS_VOID SAMPLE_ALG_CPM_HANDLE_Exit(TS_VOID *pHandle)
         pCpmParam->stAlgProcPid = 0;
     }
     
-    if (pCpmParam->stAlgProcPid1 > 0)
-    {
-        pthread_join(pCpmParam->stAlgProcPid1, 0);
-        pCpmParam->stAlgProcPid1 = 0;
-    }
+    // 没有 stAlgProcPid1 成员，删除相关代码
 
     for (i = 0; i < pCpmParam->u32AlgNum; i++)
     {
@@ -726,12 +723,12 @@ TS_S32 SAMPLE_ALG_CPM_HANDLE_Process(TS_VOID *pHandle, TS_VOID **in, TS_VOID **o
             
             // 根据 pCpmParam 确定 CPM Group ID
             //TS_U32 CPMGrp = (pCpmParam == &gstSampleVideoAlgCpm[0]) ? 0 : 1;
-            SAMPLE_ALG_Result_Proc(YuvBuf, &pCpmParam->stTmpResult, 0);
+            SAMPLE_ALG_Result_Proc(YuvBuf, &pCpmParam->stAlgResult, 0);
 
             TS_MPI_SYS_MflushCache(inPipeFrameVenc->stVFrame.u64PhyAddr[0],
                                    (TS_VOID *)(uintptr_t)(inPipeFrameVenc->stVFrame.u64VirAddr[0]),
                                    inPipeFrameVenc->stVFrame.u32Width*inPipeFrameVenc->stVFrame.u32Height*3/2);
-            //SAMPLE_ALG_ResultSave(YuvBuf, &pCpmParam->stTmpResult);
+            //SAMPLE_ALG_ResultSave(YuvBuf, pCpmParam->pstAlgResultRead);
         }
         pCpmParam->bResultUpdate = TS_FALSE;
         pthread_mutex_unlock(&(pCpmParam->stAlgProcLock));

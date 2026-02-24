@@ -525,7 +525,6 @@ if("${MPP_USE_PCSIMULATOR}" EQUAL 0)
 			message(STATUS "tranlated------- ${TEMP_LIST}")
 			set(MPI_GDC_LIB ${TEMP_LIST})
 			list(APPEND MPI_BASE_LIB ${MPI_GDC_LIB})
-			message(${MPI_GDC_LIB})
 			message(STATUS "tranlated------- ${TEMP_LIST}")
         else()
 

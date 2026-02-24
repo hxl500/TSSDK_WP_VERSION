@@ -77,7 +77,6 @@ typedef	struct{
 	VIDEO_FRAME_INFO_S			stAlgBuffer;
 	
 	pthread_t					stAlgProcPid;
-	pthread_t					stAlgProcPid1;
 	ALG_BUFFER_STATUS			enAlgProcBufStatus;
 	TS_BOOL						bAlgProcRunFlag;
 	TS_BOOL                     bResultUpdate; 

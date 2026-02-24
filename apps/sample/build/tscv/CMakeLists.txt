@@ -21,6 +21,8 @@ set(END_GRP "-Wl,--end-group")
 # 	dl
 # 	pthread
 # )
+include_directories(${APP_SRC_DIR}/../../libs/yuv/include)
+include_directories(${APP_SRC_DIR}/../../libs/yuv/lib)
 if(TARGET_CHIPSERIES STREQUAL TX5336EX)
 set(OPENCV_LIB
 	opencv_world
@@ -32,6 +34,7 @@ set(OPENCV_LIB
 	quirc
 	tegra_hal
 	ade
+	yuv
     )
 elseif(TARGET_CHIPSERIES STREQUAL TX5215BX)
 set(OPENCV_LIB
@@ -43,6 +46,7 @@ set(OPENCV_LIB
 	libwebp
 	quirc
 	ade
+	yuv
 	)
 else()
 	message("$ENV{TARGET_CHIPSERIES} not support tscv")	
@@ -52,6 +56,7 @@ include_directories($ENV{TARGET_STAGING_INC})
 include_directories($ENV{TARGET_STAGING_INC}/opencv4)
 link_directories($ENV{TARGET_STAGING_LIB}/opencv4/3rdparty)
 link_directories($ENV{TARGET_STAGING_LIB})
+link_directories(${APP_SRC_DIR}/../../libs/yuv/lib)
 
 if(TARGET_CHIPSERIES STREQUAL TX5335AX OR TARGET_CHIPSERIES STREQUAL TX5368AX OR TARGET_CHIPSERIES STREQUAL TX5339AX)
 	set(SAMPLE_TSCV_DEPS
@@ -95,11 +100,14 @@ elseif(TARGET_CHIPSERIES STREQUAL TX5215BX OR TARGET_CHIPSERIES STREQUAL TX5239C
 	set(SAMPLE_TSCV_DEPS
 		tscv
 		cve
+		yuv
 		${OPENCV_LIB}
 		#mpi
 		${MPI_BASE_LIB}
 		dl
 		pthread
+		rt
+		${APP_SRC_DIR}/../../libs/yuv/lib/libyuv.a
 	)
 	##build sample tscv cve###
 	add_executable(
@@ -107,7 +115,11 @@ elseif(TARGET_CHIPSERIES STREQUAL TX5215BX OR TARGET_CHIPSERIES STREQUAL TX5239C
 		${SAMPLE_TSCV_DIR}/sample_tscv_cve.cpp
 	)
 	target_link_libraries(${SAMPLE_APP_TSCV}_cve ${START_GRP} ${SAMPLE_TSCV_DEPS} ${END_GRP})
-
+	# add_executable(
+	# ${SAMPLE_APP_TSCV}_vgs
+	# ${SAMPLE_TSCV_DIR}/sample_tscv_vgs.cpp
+	# )
+	# target_link_libraries(${SAMPLE_APP_TSCV}_vgs ${START_GRP}  ${SAMPLE_TSCV_DEPS} ${END_GRP})
 	##build sample tscv vpss###
 	add_executable(
 		${SAMPLE_APP_TSCV}_vpss
@@ -126,6 +138,7 @@ elseif(TARGET_CHIPSERIES STREQUAL TX5336EX)
 		dl
 		# pthread
 		rt
+		${APP_SRC_DIR}/../../libs/yuv/lib/libyuv.a
 	)
 	##build sample tscv cve###
 	add_executable(
